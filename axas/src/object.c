@@ -129,8 +129,21 @@ void ax_objectAddSymbolFull(AxObject* obj, const char* name, uint64_t value, uin
 }
 
 void ax_objectDefineCodeLabel(AxObject* obj, const char* name) {
-    uint64_t offset = ax_vecSize(obj->text);
+    uint64_t offset = ax_vecSize(obj->text) * sizeof(uint32_t);
     ax_objectAddSymbolFull(obj, name, offset, STT_FUNC, 1); 
+}
+
+size_t align_to(size_t current, size_t alignment) {
+    if (alignment == 0) return current;
+    return (current + alignment - 1) & ~(alignment - 1);
+}
+
+void pad_file(FILE* f, size_t target_off) {
+    size_t current = ftell(f);
+    while (current < target_off) {
+        fputc(0, f);
+        current++;
+    }
 }
 
 void ax_objectWrite(AxObject* obj, const char* filename) {
@@ -156,21 +169,27 @@ void ax_objectWrite(AxObject* obj, const char* filename) {
 
     size_t current_off = sizeof(Elf64_Ehdr);
 
+    current_off = align_to(current_off, 4);
     size_t text_off = current_off;
     current_off += text_sz;
 
+    current_off = align_to(current_off, 8);
     size_t data_off = current_off;
     current_off += data_sz;
 
+    current_off = align_to(current_off, 1);
     size_t str_off = current_off;
     current_off += strtab_sz;
 
+    current_off = align_to(current_off, 8);
     size_t sym_off = current_off;
     current_off += symtab_sz;
 
+    current_off = align_to(current_off, 8);
     size_t reloc_off = current_off;
     current_off += reloc_sz;
 
+    
     obj->ehdr.e_shoff = current_off;
 
     Elf64_Shdr shdr[6] = {0};
@@ -219,11 +238,17 @@ void ax_objectWrite(AxObject* obj, const char* filename) {
 
     // Write all pieces
     fwrite(&obj->ehdr, 1, sizeof(obj->ehdr), f);
+    pad_file(f, text_off);
     fwrite(obj->text,   1, text_sz, f);
+    pad_file(f, data_off);
     fwrite(obj->data,   1, data_sz, f);
+    pad_file(f, str_off);
     fwrite(obj->strtab, 1, ax_vecSize(obj->strtab), f); // Updated size
+    pad_file(f, sym_off);
     fwrite(obj->symtab, 1, symtab_sz, f);
+    pad_file(f, reloc_off);
     fwrite(obj->reltab, 1, reloc_sz, f);
+    pad_file(f, obj->ehdr.e_shoff);
     fwrite(shdr,        1, sizeof(shdr), f);
     
     fclose(f);

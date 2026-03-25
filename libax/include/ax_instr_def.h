@@ -32,6 +32,7 @@ X(LDR_64, "ldr", 2, 0xF9400000, F_64 | F_MEM, encode_ldst_imm)
 X(STR_64, "str", 2, 0xF9000000, F_64 | F_MEM, encode_ldst_imm)
 X(LDR, "ldr", 2, 0xB9400000, F_32 | F_MEM, encode_ldst_imm)
 X(STR, "str", 2, 0xB9000000, F_32 | F_MEM, encode_ldst_imm)
+X(LDRB, "ldrb", 2, 0x38400000, F_32 | F_MEM, encode_ldst_imm)
 
 X(ADR, "adr", 2, 0x10000000, F_64 | F_IMM, encode_adr)
 
@@ -51,3 +52,6 @@ X(STP_PRE, "stp", 3, 0x29800000, F_32 | F_MEM | F_PRE, encode_ldst_pair)
 X(LDP_PRE, "ldp", 3, 0x29800000, F_32 | F_MEM | F_PRE, encode_ldst_pair)
 X(STP_POST, "stp", 3, 0x28800000, F_32 | F_MEM | F_POST, encode_ldst_pair)
 X(LDP_POST, "ldp", 3, 0x28800000, F_32 | F_MEM | F_POST, encode_ldst_pair)
+
+X(CBZ, "cbz", 2, 0x34000000, F_32 | F_IMM, encode_cbz)
+X(CBZ_64, "cbz", 2, 0xB4000000, F_64 | F_IMM, encode_cbz)

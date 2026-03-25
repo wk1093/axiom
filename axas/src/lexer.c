@@ -26,27 +26,49 @@ static void ax_lexerSkipWhitespace(AxLexer *lexer) {
 }
 
 AxToken ax_lexerNextToken(AxLexer* l) {
-    ax_lexerSkipWhitespace(l);
+bool encountered_newline = false;
 
+    while (true) {
+        ax_lexerSkipWhitespace(l); // Skip spaces/tabs
+        char c = ax_lexerPeek(l);
+
+        // 1. Handle Comments
+        if (c == '/' && l->src[l->pos + 1] == '/') {
+            while (ax_lexerPeek(l) != '\n' && ax_lexerPeek(l) != '\0') {
+                ax_lexerNext(l);
+            }
+            // After the comment, we loop again. 
+            // The newline at the end of the comment will be caught by the '\n' case.
+            continue;
+        }
+
+        // 2. Handle Newlines (Collapsing multiple into one)
+        if (c == '\n') {
+            encountered_newline = true;
+            ax_lexerNext(l);
+            continue; // Keep looping to catch more newlines or comments
+        }
+
+        // 3. If we hit anything else, stop skipping
+        break;
+    }
     char c = ax_lexerPeek(l);
+
     if (c == '\0') {
         return (AxToken){.type = TOK_EOF};
     }
 
-    if (c == '\n') {
-        ax_lexerNext(l);
-        while (ax_lexerPeek(l) == '\n') {
-            ax_lexerNext(l);
-        }
+    if (encountered_newline) {
         return (AxToken){.type = TOK_NEWLINE};
     }
 
-    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_') {
         // Identifier or register
         size_t start = l->pos;
         while ((ax_lexerPeek(l) >= 'a' && ax_lexerPeek(l) <= 'z') ||
                (ax_lexerPeek(l) >= 'A' && ax_lexerPeek(l) <= 'Z') ||
-               (ax_lexerPeek(l) >= '0' && ax_lexerPeek(l) <= '9')) {
+               (ax_lexerPeek(l) >= '0' && ax_lexerPeek(l) <= '9') ||
+                ax_lexerPeek(l) == '_') {
             ax_lexerNext(l);
         }
         size_t len = l->pos - start;

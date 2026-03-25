@@ -34,7 +34,7 @@ bool ax_ir_to_asm(AxIrInstr* instr, char* buf, size_t sz) {
             strncat(buf, reg_buf, sz - strlen(buf) - 1);
         } else if (arg->type == ARG_IMM) {
             char imm_buf[32];
-            snprintf(imm_buf, sizeof(imm_buf), "#%llu", arg->val);
+            snprintf(imm_buf, sizeof(imm_buf), "#%lu", arg->val);
             strncat(buf, imm_buf, sz - strlen(buf) - 1);
         } else if (arg->type == ARG_SYM) {
             strncat(buf, arg->label, sz - strlen(buf) - 1);
@@ -43,7 +43,7 @@ bool ax_ir_to_asm(AxIrInstr* instr, char* buf, size_t sz) {
             char reg_buf[8];
             snprintf(reg_buf, sizeof(reg_buf), "%c%d", arg->is_64 ? 'x' : 'w', arg->reg_idx);
             char imm_buf[32];
-            snprintf(imm_buf, sizeof(imm_buf), "#%lld", arg->val);
+            snprintf(imm_buf, sizeof(imm_buf), "#%ld", arg->val);
             if (flags & F_PRE) {
                 char combined[64];
                 snprintf(combined, sizeof(combined), "[%s, %s]!", reg_buf, imm_buf);
@@ -172,5 +172,14 @@ uint32_t encode_ldst_pair(uint32_t base_opcode, AxIrInstr* instr) {
     opcode |= ((rt2->reg_idx & 0x1F) << 10);
     opcode |= ((rn->reg_idx & 0x1F) << 5);
     opcode |= ((imm & 0x7F) << 15);
+    return opcode;
+}
+
+uint32_t encode_cbz(uint32_t base_opcode, AxIrInstr* instr) {
+    uint32_t opcode = base_opcode;
+    AxIrArg* rt = &instr->args[0];
+    AxIrArg* imm = &instr->args[1];
+    opcode |= (rt->reg_idx & 0x1F);
+    opcode |= ((imm->val >> 2) & 0x7FFFF) << 5;
     return opcode;
 }

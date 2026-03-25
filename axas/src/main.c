@@ -71,10 +71,10 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    const char* filename;
+    const char* filename = NULL;
     bool do_lex = false;
     bool do_parse = false;
-    const char* output_filename = NULL;
+    char* output_filename = NULL;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--lex") == 0) {
@@ -105,7 +105,7 @@ int main(int argc, char** argv) {
         // Default output filename is input filename with .o extension
         size_t len = strlen(filename);
         output_filename = malloc(len + 3); // for .o and null terminator
-        strncpy(output_filename, filename, len);
+        strncpy(output_filename, filename, len+1);
         char* dot = strrchr(output_filename, '.');
         if (dot) {
             *dot = '\0'; // remove existing extension

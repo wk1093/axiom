@@ -7,7 +7,7 @@ typedef enum {
     SECTION_RODATA
 } AxSection;
 
-void ax_resolveSpecialArgs(AxIrInstr* ir, AxParsedUnit unit) {
+void ax_resolveSpecialArgs(AxIrInstr* ir) {
     if (ir->opcode == OP_RET) {
         // For RET, if no register is specified, default to x30 (LR)
         if (ir->arg_count == 0) {
@@ -105,17 +105,13 @@ AxOpcode ax_resolveOpcode(AxParsedUnit* unit) {
             return OP_COUNT; // Invalid opcode
         }
     } else if (strcmp(unit->instr.mnem, "ldr") == 0) {
-        if (unit->instr.args[0].is_64) {
-            return OP_LDR_64;
-        } else {
-            return OP_LDR;
-        }
+        return unit->instr.args[0].is_64 ? OP_LDR_64 : OP_LDR;
     } else if (strcmp(unit->instr.mnem, "str") == 0) {
-        if (unit->instr.args[0].is_64) {
-            return OP_STR_64;
-        } else {
-            return OP_STR;
-        }
+        return unit->instr.args[0].is_64 ? OP_STR_64 : OP_STR;
+    } else if (strcmp(unit->instr.mnem, "ldrb") == 0) {
+        return OP_LDRB;
+    } else if (strcmp(unit->instr.mnem, "cbz") == 0) {
+        return unit->instr.args[0].is_64 ? OP_CBZ_64 : OP_CBZ;
     } else {
         // For other instructions, we can do a simple linear search
         for (int i = 0; i < OP_COUNT; i++) {
@@ -174,8 +170,13 @@ void ax_assemble(AxObject* obj, AxLexer* lexer) {
                 
                 ir.arg_count = unit.instr.arg_count;
                 memcpy(ir.args, unit.instr.args, sizeof(AxIrArg) * ir.arg_count);
-                ax_resolveSpecialArgs(&ir, unit);
+                ax_resolveSpecialArgs(&ir);
                 ax_objectEmit(obj, &ir);
+                break;
+            case UNIT_EOF:
+                break;
+            default:
+                printf("Error: Unknown unit type\n");
                 break;
         }
     }

@@ -74,5 +74,6 @@ uint32_t encode_ldst_imm(uint32_t base_opcode, AxIrInstr* instr);
 uint32_t encode_adr(uint32_t base_opcode, AxIrInstr* instr);
 uint32_t encode_svc(uint32_t base_opcode, AxIrInstr* instr);
 uint32_t encode_ldst_pair(uint32_t base_opcode, AxIrInstr* instr);
+uint32_t encode_cbz(uint32_t base_opcode, AxIrInstr* instr);
 
 #endif
