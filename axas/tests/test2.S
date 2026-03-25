@@ -27,7 +27,12 @@ puts:
         // 4. x2 = length
         // 5. x8 = 64 (write)
         mov x1, x0          // buffer
+        // we need to save x0 before calling strlen, as it will be overwritten
+        sub sp, sp, #16     // Make space on stack for x0
+        str x0, [sp]        // Save x0 on stack
         bl strlen           // You'll need a simple loop for this
+        ldr x1, [sp]        // Restore x0 (buffer pointer) into x1
+        add sp, sp, #16     // Restore stack pointer
         mov x2, x0          // length returned by strlen
         mov x0, #1          // stdout
         mov x8, #64         // write syscall

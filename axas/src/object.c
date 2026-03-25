@@ -54,6 +54,7 @@ void ax_objectEmit(AxObject* obj, AxIrInstr* instr) {
             if (instr->opcode == OP_ADR)  reloc_type = R_AARCH64_ADR_PREL_LO21;
             if (instr->opcode == OP_BL)   reloc_type = R_AARCH64_CALL26;
             if (instr->opcode == OP_B)    reloc_type = R_AARCH64_JUMP26;
+            if (instr->opcode == OP_CBZ || instr->opcode == OP_CBZ_64) reloc_type = R_AARCH64_CONDBR19;
             // Add more as needed...
 
             if (reloc_type != 0) {
@@ -68,9 +69,16 @@ void ax_objectEmit(AxObject* obj, AxIrInstr* instr) {
 
 void ax_objectDefineDataLabel(AxObject* obj, const char* name) {
     uint64_t offset = ax_vecSize(obj->data);
-    // STT_OBJECT indicates this is data, not code
-    // shndx = 2 because it points into the .data section
-    ax_objectAddSymbolFull(obj, name, offset, STT_OBJECT, 2); 
+    uint32_t existing_idx = ax_objectGetSymbolIndex(obj, name);
+
+    if (existing_idx != 0) {
+        Elf64_Sym* sym = &obj->symtab[existing_idx];
+        sym->st_value = offset;
+        sym->st_shndx = 2; // Point to .data
+        sym->st_info  = ELF64_ST_INFO(STB_GLOBAL, STT_OBJECT);
+    } else {
+        ax_objectAddSymbolFull(obj, name, offset, STT_OBJECT, 2); 
+    }
 }
 
 uint32_t ax_objectGetSymbolIndex(AxObject* obj, const char* name) {
@@ -129,8 +137,19 @@ void ax_objectAddSymbolFull(AxObject* obj, const char* name, uint64_t value, uin
 }
 
 void ax_objectDefineCodeLabel(AxObject* obj, const char* name) {
-    uint64_t offset = ax_vecSize(obj->text) * sizeof(uint32_t);
-    ax_objectAddSymbolFull(obj, name, offset, STT_FUNC, 1); 
+    uint64_t offset = ax_vecSize(obj->text) * 4;
+    uint32_t existing_idx = ax_objectGetSymbolIndex(obj, name);
+
+    if (existing_idx != 0) {
+        // We found the placeholder! Patch the existing symbol instead of adding a new one.
+        Elf64_Sym* sym = &obj->symtab[existing_idx];
+        sym->st_value = offset;
+        sym->st_shndx = 1; // Move from UNDEF to .text
+        sym->st_info  = ELF64_ST_INFO(STB_GLOBAL, STT_FUNC);
+    } else {
+        // Brand new symbol
+        ax_objectAddSymbolFull(obj, name, offset, STT_FUNC, 1);
+    }
 }
 
 size_t align_to(size_t current, size_t alignment) {

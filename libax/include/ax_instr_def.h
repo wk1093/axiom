@@ -22,6 +22,15 @@ X(SUB_IMM_32,  "sub",  3, 0x51000000, F_32 | F_IMM, encode_add_imm)
 X(SUBS_IMM_64, "subs", 3, 0xF1000000, F_64 | F_IMM, encode_add_imm)
 X(SUBS_IMM_32, "subs", 3, 0x71000000, F_32 | F_IMM, encode_add_imm)
 
+X(ADD_64, "add",  3, 0x8B000000, F_64 | F_REG, encode_logical_reg)
+X(ADD_32, "add",  3, 0x0B000000, F_32 | F_REG, encode_logical_reg)
+X(ADDS_64, "adds", 3, 0xAB000000, F_64 | F_REG, encode_logical_reg)
+X(ADDS_32, "adds", 3, 0x2B000000, F_32 | F_REG, encode_logical_reg)
+X(SUB_64, "sub",  3, 0xCB000000, F_64 | F_REG, encode_logical_reg)
+X(SUB_32, "sub",  3, 0x4B000000, F_32 | F_REG, encode_logical_reg)
+X(SUBS_64, "subs", 3, 0xEB000000, F_64 | F_REG, encode_logical_reg)
+X(SUBS_32, "subs", 3, 0x6B000000, F_32 | F_REG, encode_logical_reg)
+
 // --- Branching (Control Flow) ---
 X(B,           "b",    1, 0x14000000, F_UNI | F_IMM, encode_branch_imm)
 X(BL,          "bl",   1, 0x94000000, F_UNI | F_IMM, encode_branch_imm)
@@ -32,7 +41,7 @@ X(LDR_64, "ldr", 2, 0xF9400000, F_64 | F_MEM, encode_ldst_imm)
 X(STR_64, "str", 2, 0xF9000000, F_64 | F_MEM, encode_ldst_imm)
 X(LDR, "ldr", 2, 0xB9400000, F_32 | F_MEM, encode_ldst_imm)
 X(STR, "str", 2, 0xB9000000, F_32 | F_MEM, encode_ldst_imm)
-X(LDRB, "ldrb", 2, 0x38400000, F_32 | F_MEM, encode_ldst_imm)
+X(LDRB, "ldrb", 2, 0x39400000, F_32 | F_MEM, encode_ldst_imm)
 
 X(ADR, "adr", 2, 0x10000000, F_64 | F_IMM, encode_adr)
 

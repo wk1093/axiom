@@ -30,10 +30,26 @@ clean:
 	rm -rf $(OBJDIR)
 	$(MAKE) -C $(ROOT_DIR)/libax clean
 
-test: $(TARGET)
-	./$(TARGET)
-	$(CC) bin/output.o -o bin/output -static
-	./bin/output
+test_build: $(TARGET)
+	$(TARGET) tests/test.S -o bin/test.o
+	$(CC) bin/test.o -o bin/test -static
+
+test: test_build
+	./bin/test
+
+test_dump: test_build
+	$(OBJDUMP) -d bin/test.o
+
+test2_build: $(TARGET)
+	$(TARGET) tests/test2.S -o bin/test2.o
+	$(LD) bin/test2.o -o bin/test2 -static
+
+test2: test2_build
+	./bin/test2
+
+test2_dump: test2_build
+	$(OBJDUMP) -d bin/test2.o
+
 
 dbg: $(TARGET)
 	$(DBG) $(TARGET)

@@ -112,6 +112,30 @@ AxOpcode ax_resolveOpcode(AxParsedUnit* unit) {
         return OP_LDRB;
     } else if (strcmp(unit->instr.mnem, "cbz") == 0) {
         return unit->instr.args[0].is_64 ? OP_CBZ_64 : OP_CBZ;
+    } else if (strcmp(unit->instr.mnem, "sub") == 0) {
+        if (unit->instr.args[2].type == ARG_IMM) {
+            return unit->instr.args[0].is_64 ? OP_SUB_IMM_64 : OP_SUB_IMM_32;
+        } else {
+            return unit->instr.args[0].is_64 ? OP_SUB_64 : OP_SUB_32;
+        }
+    } else if (strcmp(unit->instr.mnem, "subs") == 0) {
+        if (unit->instr.args[2].type == ARG_IMM) {
+            return unit->instr.args[0].is_64 ? OP_SUBS_IMM_64 : OP_SUBS_IMM_32;
+        } else {
+            return unit->instr.args[0].is_64 ? OP_SUBS_64 : OP_SUBS_32;
+        }
+    } else if (strcmp(unit->instr.mnem, "add") == 0) {
+        if (unit->instr.args[2].type == ARG_IMM) {
+            return unit->instr.args[0].is_64 ? OP_ADD_IMM_64 : OP_ADD_IMM_32;
+        } else {
+            return unit->instr.args[0].is_64 ? OP_ADD_64 : OP_ADD_32;
+        }
+    } else if (strcmp(unit->instr.mnem, "adds") == 0) {
+        if (unit->instr.args[2].type == ARG_IMM) {
+            return unit->instr.args[0].is_64 ? OP_ADDS_IMM_64 : OP_ADDS_IMM_32;
+        } else {
+            return unit->instr.args[0].is_64 ? OP_ADDS_64 : OP_ADDS_32;
+        }
     } else {
         // For other instructions, we can do a simple linear search
         for (int i = 0; i < OP_COUNT; i++) {

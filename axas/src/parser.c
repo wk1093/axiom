@@ -111,10 +111,10 @@ AxParsedUnit ax_parseUnit(AxLexer* l) {
 
             if (ax_lexerPeekToken(l).type == TOK_BANG) {
                 ax_lexerNextToken(l); // consume '!'
-                unit.instr.is_post_index = true;
+                unit.instr.is_pre_index = true;
             } else if (ax_lexerPeekToken(l).type == TOK_COMMA) {
                 ax_lexerNextToken(l); // consume comma
-                unit.instr.is_pre_index = true;
+                unit.instr.is_post_index = true;
                 AxToken imm = ax_lexerNextToken(l);
                 if (imm.type == TOK_IMM) {
                     current->val = imm.imm;
