@@ -1,4 +1,3 @@
-# OPTION A: Cross-compiling
 CC      = aarch64-linux-gnu-gcc
 AR      = aarch64-linux-gnu-ar
 DBG     = qemu-aarch64 -g 1234

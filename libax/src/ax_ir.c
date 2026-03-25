@@ -142,7 +142,10 @@ uint32_t encode_adr(uint32_t base_opcode, AxIrInstr* instr) {
     AxIrArg* rd = &instr->args[0];
     AxIrArg* imm = &instr->args[1];
     opcode |= (rd->reg_idx & 0x1F);
-    opcode |= ((imm->val >> 2) & 0xFFFFFF);
+    uint32_t immlo = (imm->val & 0x3);
+    opcode |= (immlo << 29);
+    uint32_t immhi = ((imm->val >> 2) & 0x7FFFF);
+    opcode |= (immhi << 5);
     return opcode;
 }
 
@@ -159,8 +162,12 @@ uint32_t encode_ldst_pair(uint32_t base_opcode, AxIrInstr* instr) {
     AxIrArg* rt2 = &instr->args[1];
     AxIrArg* rn = &instr->args[2];
     int32_t offset = (int32_t)instr->args[2].val;
-    int32_t imm = offset / 8; // For 64-bit registers, the offset is in multiples of 8 bytes
-
+    int32_t imm;
+    if (rt1->is_64) {
+        imm = offset / 8;
+    } else {
+        imm = offset / 4;
+    }
     opcode |= (rt1->reg_idx & 0x1F);
     opcode |= ((rt2->reg_idx & 0x1F) << 10);
     opcode |= ((rn->reg_idx & 0x1F) << 5);
