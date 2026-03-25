@@ -30,6 +30,8 @@ X(RET,         "ret",  1, 0xD65F0000, F_UNI | F_REG, encode_ret)
 
 X(LDR_64, "ldr", 2, 0xF9400000, F_64 | F_MEM, encode_ldst_imm)
 X(STR_64, "str", 2, 0xF9000000, F_64 | F_MEM, encode_ldst_imm)
+X(LDR, "ldr", 2, 0xB9400000, F_32 | F_MEM, encode_ldst_imm)
+X(STR, "str", 2, 0xB9000000, F_32 | F_MEM, encode_ldst_imm)
 
 X(ADR, "adr", 2, 0x10000000, F_64 | F_IMM, encode_adr)
 

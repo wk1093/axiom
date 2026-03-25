@@ -51,10 +51,10 @@ AxToken ax_lexerNextToken(AxLexer* l) {
         }
         size_t len = l->pos - start;
         char *str = strndup(&l->src[start], len);
-        if (str[0] == 'x' && len > 1 && str[1] >= '0' && str[1] <= '9') {
+        if ((str[0] == 'x' || str[0] == 'w') && len > 1 && str[1] >= '0' && str[1] <= '9') {
             // Register
             return (AxToken){.type = TOK_REG, .str = str};
-        } else if ((strcmp(str, "sp") == 0) || (strcmp(str, "xzr") == 0)) {
+        } else if ((strcmp(str, "sp") == 0) || (strcmp(str, "xzr") == 0) || (strcmp(str, "wzr") == 0)) {
             // Special registers
             return (AxToken){.type = TOK_REG, .str = str};
         } else {

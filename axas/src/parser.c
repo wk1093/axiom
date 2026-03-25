@@ -3,7 +3,8 @@
 uint8_t regToIdx(const char* reg) {
     if (strcmp(reg, "sp") == 0) return 31;
     if (strcmp(reg, "xzr") == 0) return 31;
-    if (reg[0] == 'x' && atoi(&reg[1]) >= 0 && atoi(&reg[1]) <= 30) {
+    if (strcmp(reg, "wzr") == 0) return 31;
+    if ((reg[0] == 'x' || reg[0] == 'w') && atoi(&reg[1]) >= 0 && atoi(&reg[1]) <= 30) {
         return atoi(&reg[1]);
     }
     // Handle error: invalid register
@@ -110,10 +111,10 @@ AxParsedUnit ax_parseUnit(AxLexer* l) {
 
             if (ax_lexerPeekToken(l).type == TOK_BANG) {
                 ax_lexerNextToken(l); // consume '!'
-                unit.instr.is_pre_index = true;
+                unit.instr.is_post_index = true;
             } else if (ax_lexerPeekToken(l).type == TOK_COMMA) {
                 ax_lexerNextToken(l); // consume comma
-                unit.instr.is_post_index = true;
+                unit.instr.is_pre_index = true;
                 AxToken imm = ax_lexerNextToken(l);
                 if (imm.type == TOK_IMM) {
                     current->val = imm.imm;
