@@ -273,3 +273,104 @@ void ax_objectWrite(AxObject* obj, const char* filename) {
     fclose(f);
 }
 
+bool ax_objectLoad(AxObject* obj, const char* filename) {
+    FILE* f = fopen(filename, "rb");
+    if (!f) return false;
+
+    // 1. Initialize the object (creates empty vectors)
+    ax_objectInit(obj);
+
+    // 2. Read the ELF Header
+    if (fread(&obj->ehdr, 1, sizeof(Elf64_Ehdr), f) != sizeof(Elf64_Ehdr)) {
+        fclose(f);
+        return false;
+    }
+
+    // 3. Jump to and read the Section Header Table
+    uint16_t shnum = obj->ehdr.e_shnum;
+    Elf64_Shdr* shdrs = malloc(sizeof(Elf64_Shdr) * shnum);
+    fseek(f, obj->ehdr.e_shoff, SEEK_SET);
+    fread(shdrs, sizeof(Elf64_Shdr), shnum, f);
+
+    // 4. Populate vectors based on section headers
+    // We follow the indices used in your write function:
+    // 1: .text, 2: .data, 3: .symtab, 4: .strtab, 5: .reloc
+    for (int i = 1; i < shnum; i++) {
+        Elf64_Shdr s = shdrs[i];
+        if (s.sh_size == 0) continue;
+
+        fseek(f, s.sh_offset, SEEK_SET);
+
+        switch (i) {
+            case 1: // .text
+                {
+                    uint32_t count = s.sh_size / sizeof(uint32_t);
+                    for (uint32_t j = 0; j < count; j++) {
+                        uint32_t val;
+                        fread(&val, sizeof(uint32_t), 1, f);
+                        ax_vecPush(obj->text, val);
+                    }
+                }
+                break;
+            case 2: // .data
+                {
+                    for (uint32_t j = 0; j < s.sh_size; j++) {
+                        uint8_t val;
+                        fread(&val, 1, 1, f);
+                        ax_vecPush(obj->data, val);
+                    }
+                }
+                break;
+            case 3: // .symtab
+                {
+                    // Clear the NULL symbol added by ax_objectInit to avoid duplicates
+                    ax_vecFree(obj->symtab);
+                    obj->symtab = ax_vecNew(Elf64_Sym);
+                    
+                    uint32_t count = s.sh_size / sizeof(Elf64_Sym);
+                    for (uint32_t j = 0; j < count; j++) {
+                        Elf64_Sym sym;
+                        fread(&sym, sizeof(Elf64_Sym), 1, f);
+                        ax_vecPush(obj->symtab, sym);
+                    }
+                }
+                break;
+            case 4: // .strtab
+                {
+                    // Clear the null byte added by ax_objectInit
+                    ax_vecFree(obj->strtab);
+                    obj->strtab = ax_vecNew(char);
+
+                    for (uint32_t j = 0; j < s.sh_size; j++) {
+                        char c;
+                        fread(&c, 1, 1, f);
+                        ax_vecPush(obj->strtab, c);
+                    }
+                }
+                break;
+            case 5: // .reloc
+                {
+                    uint32_t count = s.sh_size / sizeof(Elf64_Rela);
+                    for (uint32_t j = 0; j < count; j++) {
+                        Elf64_Rela rela;
+                        fread(&rela, sizeof(Elf64_Rela), 1, f);
+                        ax_vecPush(obj->reltab, rela);
+                    }
+                }
+                break;
+        }
+    }
+
+    free(shdrs);
+    fclose(f);
+    return true;
+}
+
+void ax_printObjectInfo(AxObject* obj) {
+    printf("Object Info:\n");
+    printf("  .text: %u bytes\n", ax_vecSize(obj->text) * sizeof(uint32_t));
+    printf("  .data: %u bytes\n", ax_vecSize(obj->data));
+    printf("  .strtab: %u bytes\n", ax_vecSize(obj->strtab));
+    printf("  .symtab: %u entries\n", ax_vecSize(obj->symtab));
+    printf("  .reltab: %u entries\n", ax_vecSize(obj->reltab));
+}

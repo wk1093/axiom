@@ -19,6 +19,8 @@ void* ax_vecNewImpl(size_t elementSize);
 void ax_vecFree(void* v);
 void* ax_vecPushImpl(void* v, const void* item);
 
+void* ax_vecResize(void* v, size_t new_size);
+
 #define ax_vecNew(type) ((type*)ax_vecNewImpl(sizeof(type)))
 
 // #define ax_vecPush(v, item) (v = ax_vecPushImpl((v), &(item)))

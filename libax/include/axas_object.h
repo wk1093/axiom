@@ -2,6 +2,7 @@
 #define AXAS_OBJECT_H
 
 #include <stdint.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <elf.h>
@@ -35,5 +36,8 @@ void ax_objectAddSymbolFull(AxObject* obj, const char* name, uint64_t value, uin
 void ax_objectAddReloc(AxObject* obj, uint64_t offset, const char* symbol, uint32_t type);
 uint32_t ax_objectGetSymbolIndex(AxObject* obj, const char* name);
 void ax_objectWrite(AxObject* obj, const char* filename);
+bool ax_objectLoad(AxObject* obj, const char* filename);
+
+void ax_printObjectInfo(AxObject* obj);
 
 #endif

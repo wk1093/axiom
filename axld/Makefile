@@ -31,10 +31,10 @@ clean:
 	$(MAKE) -C $(ROOT_DIR)/libax clean
 
 test: $(TARGET)
-	$(TARGET) ../axas/tests/test2.S -o bin/test2.o
+	$(TARGET) ../axas/bin/test2.o -o bin/test2
 
 dbg: $(TARGET)
-	$(DBG) $(TARGET)
+	$(DBG) $(TARGET) ../axas/bin/test2.o -o bin/test2
 
 gdb: $(TARGET)
 	$(GDB) $(TARGET)

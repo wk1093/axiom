@@ -43,3 +43,17 @@ void* ax_vecPushImpl(void* v, const void* item) {
     return v;
 }
 
+void* ax_vecResize(void* v, size_t new_size) {
+    if (!v) return NULL;
+
+    AxVecHeader* h = ax_vecHdr(v);
+    if (new_size > h->capacity) {
+        size_t total_size = sizeof(AxVecHeader) + (h->element_size * new_size);
+        h = realloc(h, total_size);
+        if (!h) return NULL;
+        h->capacity = new_size;
+        v = (void*)(h+1);
+    }
+    h->size = new_size;
+    return v;
+}
