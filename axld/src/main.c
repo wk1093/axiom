@@ -37,8 +37,8 @@ int main(int argc, char** argv) {
     }
 
     AxObject obj;
-    if (!ax_objectLoad(&obj, output_filename)) {
-        printf("Error: Failed to load object file %s.\n", output_filename);
+    if (!ax_objectLoad(&obj, filename)) {
+        printf("Error: Failed to load object file %s.\n", filename);
         return 1;
     }
 
@@ -47,12 +47,11 @@ int main(int argc, char** argv) {
     AxExecutable exec;
     ax_execInit(&exec);
     ax_execLink(&exec, &obj);
-    char exec_filename[256];
-    snprintf(exec_filename, sizeof(exec_filename), "%s", output_filename);
-    if (ax_execWrite(&exec, exec_filename)) {
-        printf("Axiom: Linked executable %s successfully.\n", exec_filename);
+    
+    if (ax_execWrite(&exec, output_filename)) {
+        printf("Axiom: Linked executable %s successfully.\n", output_filename);
     } else {
-        printf("Axiom: Failed to write executable %s.\n", exec_filename);
+        printf("Axiom: Failed to write executable %s.\n", output_filename);
     }
     ax_objectFree(&obj);
     ax_execFree(&exec);
