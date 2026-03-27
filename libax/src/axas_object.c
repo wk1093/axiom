@@ -286,22 +286,6 @@ FILE* f = fopen(filename, "rb");
         return false;
     }
 
-    // DEBUG: Print the raw bytes of e_shoff to see if they are shifted
-    unsigned char* raw = (unsigned char*)&temp_ehdr;
-    printf("Debug Header: %02x %02x %02x %02x | shoff: %lx\n", 
-            raw[0], raw[1], raw[2], raw[3], temp_ehdr.e_shoff);
-
-    if (temp_ehdr.e_shoff == 0) {
-        // If it's 0, let's try to find it. Is it possible the header 
-        // was written with a different alignment?
-        fseek(f, 0, SEEK_END);
-        long size = ftell(f);
-        printf("File size: %ld bytes\n", size);
-        
-        // Re-read strictly
-        fseek(f, 0, SEEK_SET);
-    }
-
     // 2. Initialize and copy verified header
     // ax_objectInit(obj);
     obj->text = ax_vecNew(uint32_t);

@@ -160,7 +160,6 @@ int main(int argc, char** argv) {
     ax_objectInit(&obj);
     ax_assemble(&obj, lexer);
     ax_objectWrite(&obj, output_filename);
-    ax_printObjectInfo(&obj);
     printf("Axiom: Generated %s with %zu instructions.\n", output_filename, ax_vecSize(obj.text));
     ax_objectFree(&obj);
     ax_lexerFree(lexer);

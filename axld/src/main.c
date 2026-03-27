@@ -42,8 +42,6 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    ax_printObjectInfo(&obj);
-
     AxExecutable exec;
     ax_execInit(&exec);
     ax_execLink(&exec, &obj);
