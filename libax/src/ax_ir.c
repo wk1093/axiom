@@ -183,3 +183,15 @@ uint32_t encode_cbz(uint32_t base_opcode, AxIrInstr* instr) {
     opcode |= ((imm->val >> 2) & 0x7FFFF) << 5;
     return opcode;
 }
+
+uint32_t encode_adrp(uint32_t base_opcode, AxIrInstr* instr) {
+    uint32_t opcode = base_opcode;
+    AxIrArg* rd = &instr->args[0];
+    AxIrArg* imm = &instr->args[1];
+    opcode |= (rd->reg_idx & 0x1F);
+    uint32_t immlo = (imm->val & 0x3);
+    opcode |= (immlo << 29);
+    uint32_t immhi = ((imm->val >> 2) & 0x7FFFF);
+    opcode |= (immhi << 5);
+    return opcode;
+}

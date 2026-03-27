@@ -1,6 +1,6 @@
 .section .data
 
-msg: .asciz "Hello, World!\n"
+msg: .asciz "Goodbye, World!\n"
 
 .section .text
 .global _start

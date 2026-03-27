@@ -64,3 +64,5 @@ X(LDP_POST, "ldp", 3, 0x28800000, F_32 | F_MEM | F_POST, encode_ldst_pair)
 
 X(CBZ, "cbz", 2, 0x34000000, F_32 | F_IMM, encode_cbz)
 X(CBZ_64, "cbz", 2, 0xB4000000, F_64 | F_IMM, encode_cbz)
+
+X(ADRP, "adrp", 2, 0x90000000, F_64 | F_IMM, encode_adrp)

@@ -83,7 +83,46 @@ void ax_execLink(AxExecutable* exec, AxObject* obj) {
         } else if (type == R_AARCH64_CONDBR19) {
             int32_t imm19 = (int32_t)((S + A - P) / 4);
             *instr = (*instr & 0xFF00001F) | (imm19 << 5);
-        } else {
+        } else if (type == R_AARCH64_LDST8_ABS_LO12_NC || type == R_AARCH64_LDST16_ABS_LO12_NC ||
+                   type == R_AARCH64_LDST32_ABS_LO12_NC || type == R_AARCH64_LDST64_ABS_LO12_NC) {
+            uint32_t imm12 = (uint32_t)(S + A - P) & 0xFFF;
+            *instr = (*instr & 0xFFFFF000) | imm12;
+        } else if (type == R_AARCH64_LDST128_ABS_LO12_NC) {
+            uint32_t imm12 = (uint32_t)(S + A - P) & 0xFFF;
+            *instr = (*instr & 0xFFFFF000) | imm12;
+        } else if (type == R_AARCH64_ADR_GOT_PAGE) {
+            int64_t offset = (int64_t)(S + A - P);
+            uint32_t immlo = (uint32_t)((offset >> 12) & 3);
+            uint32_t immhi = (uint32_t)((offset >> 14) & 0x7FFFF);
+            *instr = (*instr & 0x9F00001F) | (immlo << 29) | (immhi << 5);
+        } else if (type == R_AARCH64_ABS64) {
+            uint64_t* addr_ptr = (uint64_t*)(exec->data_payload + data_offset);
+            *addr_ptr = S + A; // Write the absolute address into the data segment
+        } else if (type == R_AARCH64_RELATIVE) {
+            uint64_t* addr_ptr = (uint64_t*)(exec->data_payload + data_offset);
+            *addr_ptr = text_segment_base + total_header_size + text_offset + rel->r_offset + A; // Relative to the load address
+        } else if (type == R_AARCH64_PREL32) {
+            uint32_t* addr_ptr = (uint32_t*)(exec->data_payload + data_offset);
+            *addr_ptr = (uint32_t)(S + A - P); // 32-bit PC-relative offset
+        } else if (type == R_AARCH64_PREL64) {
+            uint64_t* addr_ptr = (uint64_t*)(exec->data_payload + data_offset);
+            *addr_ptr = S + A - P; // 64-bit PC-relative offset
+        } else if (type == R_AARCH64_ABS32) {
+            uint32_t* addr_ptr = (uint32_t*)(exec->data_payload + data_offset);
+            *addr_ptr = (uint32_t)(S + A); // Absolute 32-bit address
+        } else if (type == R_AARCH64_ABS16) {
+            uint16_t* addr_ptr = (uint16_t*)(exec->data_payload + data_offset);
+            *addr_ptr = (uint16_t)(S + A); // Absolute 16-bit address
+        } else if (type == R_AARCH64_ADR_PREL_PG_HI21) {
+            int64_t offset = (int64_t)(S + A - P);
+            uint32_t immlo = (uint32_t)((offset >> 12) & 3);
+            uint32_t immhi = (uint32_t)((offset >> 14) & 0x7FFFF);
+            *instr = (*instr & 0x9F00001F) | (immlo << 29) | (immhi << 5);
+        } else if (type == R_AARCH64_ADD_ABS_LO12_NC) {
+            uint32_t imm12 = (uint32_t)(S + A) & 0xFFF;
+            *instr = (*instr & 0xFFFFF000) | imm12;
+        }
+        else {
             printf("Warning: Unsupported relocation type %u\n", type);
         }
     }
