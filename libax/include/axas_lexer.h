@@ -6,6 +6,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 typedef enum {
     TOK_IDENT,   // adr, movz, main, puts
