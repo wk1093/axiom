@@ -62,3 +62,11 @@ Axiom is a work-in-progress and currently operates under the following constrain
 New instructions can be added by only modifying two different places:
 - libax/include/ax_instr_def.h: X-macros containing main information about an instruction.
 - libax/src/axas_assembler.c: If the instruction has any special rules about how it is assembled.
+
+## TODO
+- [ ] Add more instructions to assembler
+- [ ] Add support for all sections (.rodata, .bss, etc.)
+- [ ] Add support for multiple object files
+- [ ] Add supprt for .a library files (statically linked)
+- [ ] HARD: Add support for dynamically linking
+- [ ] HARD: Write C compiler
