@@ -67,6 +67,6 @@ main:
         adr x0, msg
         bl puts
 
-        mov x0, #2          // Return 0 from main
+        mov x0, #0          // Return 0 from main
         ldp x29, x30, [sp], #16
         ret

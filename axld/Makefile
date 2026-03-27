@@ -5,7 +5,7 @@ TARGET = $(OBJDIR)/axld
 LIB_PATH = $(ROOT_DIR)/libax/$(OBJDIR)/libax.a
 
 # add include for this project
-INCLUDES += -I$(ROOT_DIR)/axld/include
+INCLUDES += -I$(ROOT_DIR)/axld/include -I$(ROOT_DIR)/axas/include
 
 SRCS = $(wildcard $(SRCDIR)/*.c)
 OBJS = $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(SRCS))
@@ -29,3 +29,12 @@ $(LIB_PATH):
 clean:
 	rm -rf $(OBJDIR)
 	$(MAKE) -C $(ROOT_DIR)/libax clean
+
+test: $(TARGET)
+	$(TARGET) ../axas/tests/test2.S -o bin/test2.o
+
+dbg: $(TARGET)
+	$(DBG) $(TARGET)
+
+gdb: $(TARGET)
+	$(GDB) $(TARGET)
