@@ -53,7 +53,7 @@ Axiom is a work-in-progress and currently operates under the following constrain
 * **Architecture**: Primarily focused on AArch64 (ARM64) systems.
 
 ## Philosophy
-* **Zero Dependencies**: No third-party libraries. If we need a data structure, we build it.
+* **Zero Dependencies**: No third-party libraries. If I need a data structure, I build it.
 * **Transparency**: Code is written to be readable and to serve as a reference for how ELF files are structured and manipulated.
 * **Low-Level Control**: Direct manipulation of section headers, symbol tables, and relocation entries.
 
