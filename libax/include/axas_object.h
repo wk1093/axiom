@@ -12,9 +12,12 @@
 typedef struct {
     uint32_t* text;    // Instructions
     uint8_t* data;    // Global variables/constants
-    char* strtab;  // String table
+    char* strtab;  // String table (symbol names)
     Elf64_Sym* symtab; // Symbol table
-    Elf64_Rela* reltab; // Relocation table
+    Elf64_Rela* reltab; // Relocation table (.text only)
+
+    uint16_t text_shndx; // Section index of .text in this object file
+    uint16_t data_shndx; // Section index of .data in this object file
 
     Elf64_Ehdr ehdr;
 } AxObject;

@@ -11,11 +11,28 @@ void ax_execInit(AxExecutable* exec) {
     exec->ehdr.e_type    = ET_EXEC;
     exec->ehdr.e_machine = EM_AARCH64;
     exec->ehdr.e_version = EV_CURRENT;
+
+    exec->global_sym_names  = ax_vecNew(char*);
+    exec->global_sym_vaddrs = ax_vecNew(uint64_t);
 }
 
 void ax_execFree(AxExecutable* exec) {
     if (exec->text_payload) free(exec->text_payload);
     if (exec->data_payload) free(exec->data_payload);
+    for (size_t i = 0; i < ax_vecSize(exec->global_sym_names); i++)
+        free(exec->global_sym_names[i]);
+    ax_vecFree(exec->global_sym_names);
+    ax_vecFree(exec->global_sym_vaddrs);
+}
+
+// Look up a symbol by name in the global symbol table.
+// Returns its resolved virtual address, or 0 if not found.
+static uint64_t ax_execLookupGlobal(AxExecutable* exec, const char* name) {
+    for (size_t i = 0; i < ax_vecSize(exec->global_sym_names); i++) {
+        if (strcmp(exec->global_sym_names[i], name) == 0)
+            return exec->global_sym_vaddrs[i];
+    }
+    return 0;
 }
 
 #define TEXT_VADDR 0x400000
@@ -46,7 +63,28 @@ void ax_execLink(AxExecutable* exec, AxObject* obj) {
     uint64_t text_segment_base = TEXT_VADDR;
     uint64_t data_segment_base = TEXT_VADDR + PAGE_SIZE;
 
-    // 5. Patch Relocations
+    // 5a. Add all defined global symbols from this object to the global table so
+    //     later objects can resolve cross-file references.
+    uint32_t sym_count_pre = ax_vecSize(obj->symtab);
+    for (uint32_t i = 1; i < sym_count_pre; i++) {
+        Elf64_Sym* sym = &obj->symtab[i];
+        if (sym->st_shndx == SHN_UNDEF) continue; // external / undefined
+        if (sym->st_name == 0) continue;           // anonymous (section symbols etc.)
+        const char* name = obj->strtab + sym->st_name;
+        if (name[0] == '\0') continue;
+
+        uint64_t sym_vaddr;
+        if (sym->st_shndx == obj->data_shndx)
+            sym_vaddr = data_segment_base + data_offset + sym->st_value;
+        else
+            sym_vaddr = text_segment_base + total_header_size + text_offset + sym->st_value;
+
+        char* name_copy = strdup(name);
+        ax_vecPush(exec->global_sym_names,  name_copy);
+        ax_vecPush(exec->global_sym_vaddrs, sym_vaddr);
+    }
+
+    // 5b. Patch Relocations
     uint32_t rel_count = ax_vecSize(obj->reltab);
     for (uint32_t i = 0; i < rel_count; i++) {
         Elf64_Rela* rel = &obj->reltab[i];
@@ -56,11 +94,19 @@ void ax_execLink(AxExecutable* exec, AxObject* obj) {
         Elf64_Sym* target_sym = &obj->symtab[sym_idx];
         
         uint64_t S; // Final Symbol VAddr
-        if (target_sym->st_shndx == 2) { // .data
-            // Base of data segment + offset of existing data + offset of this symbol
+        if (target_sym->st_shndx == SHN_UNDEF) {
+            // Symbol defined in another object file — look up the global table
+            const char* sym_name = obj->strtab + target_sym->st_name;
+            S = ax_execLookupGlobal(exec, sym_name);
+            if (S == 0) {
+                printf("Warning: undefined symbol '%s' — relocation skipped\n", sym_name);
+                continue;
+            }
+        } else if (target_sym->st_shndx == obj->data_shndx) {
+            // Symbol (or section symbol) lives in .data
             S = data_segment_base + data_offset + target_sym->st_value;
-        } else { // .text
-            // Base of text segment + header size + offset of existing code + offset of symbol
+        } else {
+            // Symbol lives in .text (or another code section)
             S = text_segment_base + total_header_size + text_offset + target_sym->st_value;
         }
 
@@ -131,13 +177,18 @@ void ax_execLink(AxExecutable* exec, AxObject* obj) {
     exec->text_payload_size += obj_text_bytes;
     exec->data_payload_size += obj_data_bytes;
 
-    // 6. Find _start for Entry Point
+    // 6. Find _start for Entry Point (prefer local definition; fall back to global table)
     uint32_t sym_count = ax_vecSize(obj->symtab);
     for (uint32_t i = 0; i < sym_count; i++) {
-        char* name = obj->strtab + obj->symtab[i].st_name;
-        if (strcmp(name, "_start") == 0) {
+        if (obj->symtab[i].st_name == 0) continue;
+        const char* name = obj->strtab + obj->symtab[i].st_name;
+        if (strcmp(name, "_start") == 0 && obj->symtab[i].st_shndx != SHN_UNDEF) {
             exec->entry_point = text_segment_base + total_header_size + text_offset + obj->symtab[i].st_value;
         }
+    }
+    if (exec->entry_point == 0) {
+        uint64_t gaddr = ax_execLookupGlobal(exec, "_start");
+        if (gaddr != 0) exec->entry_point = gaddr;
     }
 }
 

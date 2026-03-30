@@ -25,6 +25,11 @@ typedef struct {
     uint64_t data_payload_size;
 
     uint64_t entry_point; // VAddr of _start
+
+    // Global symbol table for cross-file linking:
+    // parallel arrays mapping names -> resolved virtual addresses
+    char**    global_sym_names;   // owns the strings (strdup'd)
+    uint64_t* global_sym_vaddrs;
 } AxExecutable;
 
 void ax_execInit(AxExecutable* exec);

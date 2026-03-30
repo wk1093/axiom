@@ -16,6 +16,8 @@ void ax_objectInit(AxObject* obj) {
     obj->strtab = ax_vecNew(char);
     obj->symtab = ax_vecNew(Elf64_Sym);
     obj->reltab = ax_vecNew(Elf64_Rela);
+    obj->text_shndx = 1; // axas always puts .text at section 1
+    obj->data_shndx = 2; // axas always puts .data at section 2
 
     // ELF requires index 0 of strtab to be a null byte
     ax_vecPush(obj->strtab, '\0');
@@ -276,79 +278,97 @@ void ax_objectWrite(AxObject* obj, const char* filename) {
 }
 
 bool ax_objectLoad(AxObject* obj, const char* filename) {
-FILE* f = fopen(filename, "rb");
+    FILE* f = fopen(filename, "rb");
     if (!f) return false;
 
-    // 1. Read header into a local temp
+    // 1. Read ELF header
     Elf64_Ehdr temp_ehdr;
     memset(&temp_ehdr, 0, sizeof(temp_ehdr));
-    if (fread(&temp_ehdr, 1, 64, f) != 64) { // ELF64 headers are exactly 64 bytes
+    if (fread(&temp_ehdr, 1, 64, f) != 64) {
         printf("Failed to read ELF header\n");
         fclose(f);
         return false;
     }
 
-    // 2. Initialize and copy verified header
-    // ax_objectInit(obj);
-    obj->text = ax_vecNew(uint32_t);
-    obj->data = ax_vecNew(uint8_t);
+    obj->text   = ax_vecNew(uint32_t);
+    obj->data   = ax_vecNew(uint8_t);
     obj->strtab = ax_vecNew(char);
     obj->symtab = ax_vecNew(Elf64_Sym);
     obj->reltab = ax_vecNew(Elf64_Rela);
-    obj->ehdr = temp_ehdr;
+    obj->ehdr   = temp_ehdr;
+    // Defaults (axas-style); overridden below if we find different indices
+    obj->text_shndx = 1;
+    obj->data_shndx = 2;
 
-    // 3. Navigate to Section Headers
     if (obj->ehdr.e_shoff == 0) {
         printf("No section header table found\n");
         fclose(f);
         return false;
     }
 
-    // 4. Load Section Header Table
+    // 2. Load section header table
     fseek(f, obj->ehdr.e_shoff, SEEK_SET);
     Elf64_Shdr* shdrs = malloc(sizeof(Elf64_Shdr) * obj->ehdr.e_shnum);
     fread(shdrs, sizeof(Elf64_Shdr), obj->ehdr.e_shnum, f);
 
-    // 5. Nuke the 'Init' defaults so we don't have offset-0 junk
-    ax_vecFree(obj->strtab); obj->strtab = ax_vecNew(char);
-    ax_vecFree(obj->symtab); obj->symtab = ax_vecNew(Elf64_Sym);
+    // 3. First pass: identify the symbol string table index and the
+    //    actual section indices for .text and .data.  GCC separates
+    //    .strtab (symbol names, sh_link of .symtab) from .shstrtab
+    //    (section names, e_shstrndx).  Using e_shstrndx for symbol
+    //    lookups is the root cause of symbols like _start not being found.
+    int strtab_idx = obj->ehdr.e_shstrndx; // safe fallback
+    int text_shndx = -1, data_shndx = -1;
+    for (int i = 0; i < obj->ehdr.e_shnum; i++) {
+        Elf64_Shdr* s = &shdrs[i];
+        if (s->sh_type == SHT_SYMTAB) {
+            strtab_idx = (int)s->sh_link;
+        } else if (s->sh_type == SHT_PROGBITS && (s->sh_flags & SHF_ALLOC)) {
+            if ((s->sh_flags & SHF_EXECINSTR) && text_shndx == -1)
+                text_shndx = i;
+            else if ((s->sh_flags & SHF_WRITE) && data_shndx == -1)
+                data_shndx = i;
+        }
+    }
+    if (text_shndx != -1) obj->text_shndx = (uint16_t)text_shndx;
+    if (data_shndx != -1) obj->data_shndx = (uint16_t)data_shndx;
 
-    // 6. Use the shdrs to find the data, regardless of index order
+    // 4. Second pass: load section data
     for (int i = 0; i < obj->ehdr.e_shnum; i++) {
         Elf64_Shdr s = shdrs[i];
         if (s.sh_size == 0) continue;
 
         fseek(f, s.sh_offset, SEEK_SET);
 
-        // Identify sections by type/flags since Write indices are fixed
-        if (s.sh_type == SHT_PROGBITS) {
+        if (s.sh_type == SHT_PROGBITS && (s.sh_flags & SHF_ALLOC)) {
             if (s.sh_flags & SHF_EXECINSTR) {
-                // .text
+                // .text: load as 32-bit instructions
                 size_t count = s.sh_size / 4;
                 for (size_t j = 0; j < count; j++) {
                     uint32_t val; fread(&val, 4, 1, f);
                     ax_vecPush(obj->text, val);
                 }
-            } else {
-                // .data
+            } else if (s.sh_flags & SHF_WRITE) {
+                // .data: writable, allocated (skip .rodata and debug sections)
                 for (size_t j = 0; j < s.sh_size; j++) {
                     uint8_t val; fread(&val, 1, 1, f);
                     ax_vecPush(obj->data, val);
                 }
             }
+            // .rodata (allocatable, non-writable, non-exec) intentionally skipped for now
         } else if (s.sh_type == SHT_SYMTAB) {
             size_t count = s.sh_size / sizeof(Elf64_Sym);
             for (size_t j = 0; j < count; j++) {
                 Elf64_Sym sym; fread(&sym, sizeof(Elf64_Sym), 1, f);
                 ax_vecPush(obj->symtab, sym);
             }
-        } else if (s.sh_type == SHT_STRTAB && i == obj->ehdr.e_shstrndx) {
-            // Our main strtab
+        } else if (s.sh_type == SHT_STRTAB && i == strtab_idx) {
+            // Symbol-name string table (.strtab, not .shstrtab)
             for (size_t j = 0; j < s.sh_size; j++) {
                 char c; fread(&c, 1, 1, f);
                 ax_vecPush(obj->strtab, c);
             }
-        } else if (s.sh_type == SHT_RELA) {
+        } else if (s.sh_type == SHT_RELA && (int)s.sh_info == text_shndx) {
+            // Only load relocations that apply to .text; skip debug relocations
             size_t count = s.sh_size / sizeof(Elf64_Rela);
             for (size_t j = 0; j < count; j++) {
                 Elf64_Rela rela; fread(&rela, sizeof(Elf64_Rela), 1, f);
