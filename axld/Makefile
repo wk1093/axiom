@@ -29,12 +29,3 @@ $(LIB_PATH):
 clean:
 	rm -rf $(OBJDIR)
 	$(MAKE) -C $(ROOT_DIR)/libax clean
-
-test: $(TARGET)
-	$(TARGET) ../axas/bin/test2.o -o bin/test2
-
-dbg: $(TARGET)
-	$(DBG) $(TARGET) ../axas/bin/test2.o -o bin/test2
-
-gdb: $(TARGET)
-	$(GDB) $(TARGET)
