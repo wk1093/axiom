@@ -23,32 +23,105 @@ clean:
 bin:
 	mkdir -p bin
 
-# compile options
-bin/%_axas.o: tests/%.S axas bin
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Standalone tests — define their own _start and do not use stdlib.
+# Assembled with:  axas  or  gcc -c
+# Linked with:     axld  or  system ld
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Object files — prefixed with "standalone_" to avoid collisions with stdlib objs.
+# Note: % in Make pattern rules never matches /, so these rules only apply to
+# single files directly under tests/standalone/, not subdirectories.
+bin/standalone_%_axas.o: tests/standalone/%.S axas | bin
 	-$(RUNNER) axas/bin/axas -o $@ $<
-bin/%_gcc.o: tests/%.S bin
+bin/standalone_%_gcc.o: tests/standalone/%.S | bin
 	-$(CC) $(CFLAGS) -c $< -o $@
 
-# link options
-bin/%_axld: bin/%.o axld bin
+# Executables
+bin/standalone_%_axas_axld: bin/standalone_%_axas.o axld | bin
 	-$(RUNNER) axld/bin/axld -o $@ $<
 	-chmod +x $@
-bin/%_gcc: bin/%.o bin
-	-$(CC) $(CFLAGS) $< -o $@
-bin/%_ld: bin/%.o bin
+bin/standalone_%_gcc_axld: bin/standalone_%_gcc.o axld | bin
+	-$(RUNNER) axld/bin/axld -o $@ $<
+	-chmod +x $@
+bin/standalone_%_gcc_ld: bin/standalone_%_gcc.o | bin
+	-$(LD) -o $@ $<
+bin/standalone_%_axas_ld: bin/standalone_%_axas.o | bin
 	-$(LD) -o $@ $<
 
-# make a test target that builds all the test executables using axas and axld (some will fail because they are meant to be run with or without cstdlib, so we ignore failures)
-ALL_TESTS = $(wildcard tests/*.S)
-TEST_OBJECTS = $(patsubst tests/%.S, bin/%_axas.o, $(ALL_TESTS)) $(patsubst tests/%.S, bin/%_gcc.o, $(ALL_TESTS))
-TEST_EXECUTABLES = $(patsubst bin/%.o, bin/%_axld, $(TEST_OBJECTS)) $(patsubst bin/%.o, bin/%_gcc, $(TEST_OBJECTS)) $(patsubst bin/%.o, bin/%_ld, $(TEST_OBJECTS))
-test: $(TEST_EXECUTABLES)
-	@echo "--- All tests built in bin/ ---"
-	@# Run all of the ones that were built without failure, ignoring the ones that were meant to fail
-	@# and generate a report of which tests passed and which failed
-	@for exe in $(TEST_EXECUTABLES); do \
+STANDALONE_SINGLES := $(patsubst tests/standalone/%.S,%,$(wildcard tests/standalone/*.S))
+STANDALONE_SINGLE_EXES := \
+	$(patsubst %,bin/standalone_%_axas_axld,$(STANDALONE_SINGLES)) \
+	$(patsubst %,bin/standalone_%_gcc_axld, $(STANDALONE_SINGLES)) \
+	$(patsubst %,bin/standalone_%_gcc_ld,   $(STANDALONE_SINGLES))
+
+# Multi-object standalone subdirectories.
+# Intermediates go into bin/standalone_$(dir)/ to avoid pattern rule clashes.
+STANDALONE_MULTI_DIRS := $(patsubst tests/standalone/%/,%,$(wildcard tests/standalone/*/))
+STANDALONE_MULTI_EXES :=
+
+define STANDALONE_MULTI_template
+$(1)_GCC_OBJS  := $(patsubst tests/standalone/$(1)/%.S,bin/standalone_$(1)/%_gcc.o,$(wildcard tests/standalone/$(1)/*.S))
+$(1)_AXAS_OBJS := $(patsubst tests/standalone/$(1)/%.S,bin/standalone_$(1)/%_axas.o,$(wildcard tests/standalone/$(1)/*.S))
+
+bin/standalone_$(1):
+	mkdir -p $$@
+
+bin/standalone_$(1)/%_gcc.o: tests/standalone/$(1)/%.S | bin/standalone_$(1)
+	-$$(CC) $$(CFLAGS) -c $$< -o $$@
+
+bin/standalone_$(1)/%_axas.o: tests/standalone/$(1)/%.S axas | bin/standalone_$(1)
+	-$$(RUNNER) axas/bin/axas -o $$@ $$<
+
+bin/standalone_$(1)_gcc_axld: $$($(1)_GCC_OBJS) axld | bin
+	-$$(RUNNER) axld/bin/axld -o $$@ $$($(1)_GCC_OBJS)
+	-chmod +x $$@
+
+bin/standalone_$(1)_axas_axld: $$($(1)_AXAS_OBJS) axld | bin
+	-$$(RUNNER) axld/bin/axld -o $$@ $$($(1)_AXAS_OBJS)
+	-chmod +x $$@
+
+bin/standalone_$(1)_gcc_ld: $$($(1)_GCC_OBJS) | bin
+	-$$(LD) -o $$@ $$($(1)_GCC_OBJS)
+
+bin/standalone_$(1)_axas_ld: $$($(1)_AXAS_OBJS) | bin
+	-$$(LD) -o $$@ $$($(1)_AXAS_OBJS)
+
+STANDALONE_MULTI_EXES += bin/standalone_$(1)_gcc_axld bin/standalone_$(1)_axas_axld bin/standalone_$(1)_gcc_ld bin/standalone_$(1)_axas_ld
+endef
+
+$(foreach dir,$(STANDALONE_MULTI_DIRS),$(eval $(call STANDALONE_MULTI_template,$(dir))))
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Stdlib tests
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+bin/stdlib_%_gcc.o: tests/stdlib/%.S | bin
+	-$(CC) $(CFLAGS) -c $< -o $@
+
+bin/stdlib_%_axas.o: tests/stdlib/%.S axas | bin
+	-$(RUNNER) axas/bin/axas -o $@ $<
+
+bin/stdlib_%_gcc_ld: bin/stdlib_%_gcc.o | bin
+	-$(CC) $(CFLAGS) $< -o $@
+
+bin/stdlib_%_axas_axld: bin/stdlib_%_axas.o | bin
+	-$(RUNNER) axld/bin/axld -o $@ $< -l $(LIBC)
+	-chmod +x $@
+
+STDLIB_SINGLES := $(patsubst tests/stdlib/%.S,%,$(wildcard tests/stdlib/*.S))
+STDLIB_SINGLE_EXES := $(patsubst %,bin/stdlib_%_gcc_ld,$(STDLIB_SINGLES)) $(patsubst %,bin/stdlib_%_axas_axld,$(STDLIB_SINGLES))
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Test runner
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ALL_TEST_EXES := $(STANDALONE_SINGLE_EXES) $(STANDALONE_MULTI_EXES) $(STDLIB_SINGLE_EXES)
+
+test: $(ALL_TEST_EXES)
+	@echo "--- All tests built ---"
+	@for exe in $(ALL_TEST_EXES); do \
 		if [ -x $$exe ]; then \
-			echo "Running $$exe..."; \
 			if $$exe; then \
 				echo "PASS: $$exe"; \
 			else \

@@ -5,6 +5,7 @@ OBJDUMP = aarch64-linux-gnu-objdump
 DBG     = qemu-aarch64 -g 1234
 GDB	    = aarch64-linux-gnu-gdb -q -ex "target remote :1234" --args
 RUNNER  = qemu-aarch64
+LIBC    = /usr/aarch64-linux-gnu/lib/libc.a
 
 ARCH := $(shell uname -m)
 

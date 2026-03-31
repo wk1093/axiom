@@ -19,6 +19,10 @@ typedef struct {
     uint16_t text_shndx; // Section index of .text in this object file
     uint16_t data_shndx; // Section index of .data in this object file
 
+    // Set by the linker during ax_execRegisterSymbols; used in ax_execCopyAndPatch.
+    uint64_t link_text_offset;
+    uint64_t link_data_offset;
+
     Elf64_Ehdr ehdr;
 } AxObject;
 

@@ -36,6 +36,18 @@ void ax_execInit(AxExecutable* exec);
 
 void ax_execFree(AxExecutable* exec);
 
+// Pass 1: compute this object's layout offsets and register all defined symbols.
+// Call for every object before any ax_execCopyAndPatch call so that forward
+// cross-file references are resolved correctly regardless of link order.
+void ax_execRegisterSymbols(AxExecutable* exec, AxObject* obj);
+
+// Pass 2: copy code/data into the executable buffers and patch all relocations.
+// Must be called after ax_execRegisterSymbols for ALL objects.
+void ax_execCopyAndPatch(AxExecutable* exec, AxObject* obj);
+
+// Convenience wrapper: ax_execRegisterSymbols + ax_execCopyAndPatch in one call.
+// Suitable when linking a single object file; for multiple objects use the
+// separate passes so that forward references resolve cleanly.
 void ax_execLink(AxExecutable* exec, AxObject* obj);
 
 bool ax_execWrite(AxExecutable* exec, const char* filename);

@@ -35,56 +35,17 @@ static uint64_t ax_execLookupGlobal(AxExecutable* exec, const char* name) {
     return 0;
 }
 
-#define TEXT_VADDR 0x400000
+#define TEXT_VADDR        0x400000
+#define PAGE_SIZE_EXEC    0x10000
+#define TOTAL_HEADER_SIZE (64 + (2 * 56))  // ELF64 ehdr + 2 phdrs
 
-void ax_execLink(AxExecutable* exec, AxObject* obj) {
-    const uint32_t PAGE_SIZE = 0x10000;
-    const uint32_t total_header_size = 64 + (2 * 56);
-
-    // 1. Calculate current offsets in the monolithic payloads
-    uint64_t text_offset = exec->text_payload_size;
-    uint64_t data_offset = exec->data_payload_size;
-
-    // 2. Expand Payloads
-    uint64_t obj_text_bytes = ax_vecSize(obj->text) * sizeof(uint32_t);
-    uint64_t obj_data_bytes = ax_vecSize(obj->data);
-
-    exec->text_payload = realloc(exec->text_payload, text_offset + obj_text_bytes);
-    exec->data_payload = realloc(exec->data_payload, data_offset + obj_data_bytes);
-
-    // 3. Copy Data
-    memcpy(exec->text_payload + text_offset, obj->text, obj_text_bytes);
-    memcpy(exec->data_payload + data_offset, obj->data, obj_data_bytes);
-
-    // 4. Calculate Segment Bases
-    // According to your readelf:
-    // TEXT Segment starts at TEXT_VADDR (0x400000)
-    // DATA Segment starts at TEXT_VADDR + PAGE_SIZE (0x410000)
+// Helper: apply all relocation patches for obj's .text.
+// text_offset / data_offset are the object's positions in the monolithic buffers.
+static void patch_relocations(AxExecutable* exec, AxObject* obj,
+                               uint64_t text_offset, uint64_t data_offset) {
     uint64_t text_segment_base = TEXT_VADDR;
-    uint64_t data_segment_base = TEXT_VADDR + PAGE_SIZE;
+    uint64_t data_segment_base = TEXT_VADDR + PAGE_SIZE_EXEC;
 
-    // 5a. Add all defined global symbols from this object to the global table so
-    //     later objects can resolve cross-file references.
-    uint32_t sym_count_pre = ax_vecSize(obj->symtab);
-    for (uint32_t i = 1; i < sym_count_pre; i++) {
-        Elf64_Sym* sym = &obj->symtab[i];
-        if (sym->st_shndx == SHN_UNDEF) continue; // external / undefined
-        if (sym->st_name == 0) continue;           // anonymous (section symbols etc.)
-        const char* name = obj->strtab + sym->st_name;
-        if (name[0] == '\0') continue;
-
-        uint64_t sym_vaddr;
-        if (sym->st_shndx == obj->data_shndx)
-            sym_vaddr = data_segment_base + data_offset + sym->st_value;
-        else
-            sym_vaddr = text_segment_base + total_header_size + text_offset + sym->st_value;
-
-        char* name_copy = strdup(name);
-        ax_vecPush(exec->global_sym_names,  name_copy);
-        ax_vecPush(exec->global_sym_vaddrs, sym_vaddr);
-    }
-
-    // 5b. Patch Relocations
     uint32_t rel_count = ax_vecSize(obj->reltab);
     for (uint32_t i = 0; i < rel_count; i++) {
         Elf64_Rela* rel = &obj->reltab[i];
@@ -92,10 +53,9 @@ void ax_execLink(AxExecutable* exec, AxObject* obj) {
         uint32_t type    = ELF64_R_TYPE(rel->r_info);
 
         Elf64_Sym* target_sym = &obj->symtab[sym_idx];
-        
+
         uint64_t S; // Final Symbol VAddr
         if (target_sym->st_shndx == SHN_UNDEF) {
-            // Symbol defined in another object file — look up the global table
             const char* sym_name = obj->strtab + target_sym->st_name;
             S = ax_execLookupGlobal(exec, sym_name);
             if (S == 0) {
@@ -103,15 +63,12 @@ void ax_execLink(AxExecutable* exec, AxObject* obj) {
                 continue;
             }
         } else if (target_sym->st_shndx == obj->data_shndx) {
-            // Symbol (or section symbol) lives in .data
             S = data_segment_base + data_offset + target_sym->st_value;
         } else {
-            // Symbol lives in .text (or another code section)
-            S = text_segment_base + total_header_size + text_offset + target_sym->st_value;
+            S = text_segment_base + TOTAL_HEADER_SIZE + text_offset + target_sym->st_value;
         }
 
-        // P is the VAddr of the instruction being patched
-        uint64_t P = text_segment_base + total_header_size + text_offset + rel->r_offset;
+        uint64_t P = text_segment_base + TOTAL_HEADER_SIZE + text_offset + rel->r_offset;
         int64_t  A = rel->r_addend;
 
         uint32_t* instr = (uint32_t*)(exec->text_payload + text_offset + rel->r_offset);
@@ -119,77 +76,114 @@ void ax_execLink(AxExecutable* exec, AxObject* obj) {
         if (type == R_AARCH64_CALL26 || type == R_AARCH64_JUMP26) {
             int32_t imm26 = (int32_t)((S + A - P) / 4);
             *instr = (*instr & 0xFC000000) | (imm26 & 0x03FFFFFF);
-        } 
-        else if (type == R_AARCH64_ADR_PREL_LO21) {
+        } else if (type == R_AARCH64_ADR_PREL_LO21) {
             int64_t offset = (int64_t)(S + A - P);
             uint32_t immlo = (uint32_t)(offset & 3);
             uint32_t immhi = (uint32_t)((offset >> 2) & 0x7FFFF);
-            // Patch: [30:29] = immlo, [23:5] = immhi
             *instr = (*instr & 0x9F00001F) | (immlo << 29) | (immhi << 5);
         } else if (type == R_AARCH64_CONDBR19) {
             int32_t imm19 = (int32_t)((S + A - P) / 4);
             *instr = (*instr & 0xFF00001F) | (imm19 << 5);
-        } else if (type == R_AARCH64_LDST8_ABS_LO12_NC || type == R_AARCH64_LDST16_ABS_LO12_NC ||
-                   type == R_AARCH64_LDST32_ABS_LO12_NC || type == R_AARCH64_LDST64_ABS_LO12_NC) {
-            uint32_t imm12 = (uint32_t)(S + A - P) & 0xFFF;
-            *instr = (*instr & 0xFFFFF000) | imm12;
-        } else if (type == R_AARCH64_LDST128_ABS_LO12_NC) {
-            uint32_t imm12 = (uint32_t)(S + A - P) & 0xFFF;
-            *instr = (*instr & 0xFFFFF000) | imm12;
-        } else if (type == R_AARCH64_ADR_GOT_PAGE) {
-            int64_t offset = (int64_t)(S + A - P);
-            uint32_t immlo = (uint32_t)((offset >> 12) & 3);
-            uint32_t immhi = (uint32_t)((offset >> 14) & 0x7FFFF);
-            *instr = (*instr & 0x9F00001F) | (immlo << 29) | (immhi << 5);
-        } else if (type == R_AARCH64_ABS64) {
-            uint64_t* addr_ptr = (uint64_t*)(exec->data_payload + data_offset);
-            *addr_ptr = S + A; // Write the absolute address into the data segment
-        } else if (type == R_AARCH64_RELATIVE) {
-            uint64_t* addr_ptr = (uint64_t*)(exec->data_payload + data_offset);
-            *addr_ptr = text_segment_base + total_header_size + text_offset + rel->r_offset + A; // Relative to the load address
-        } else if (type == R_AARCH64_PREL32) {
-            uint32_t* addr_ptr = (uint32_t*)(exec->data_payload + data_offset);
-            *addr_ptr = (uint32_t)(S + A - P); // 32-bit PC-relative offset
-        } else if (type == R_AARCH64_PREL64) {
-            uint64_t* addr_ptr = (uint64_t*)(exec->data_payload + data_offset);
-            *addr_ptr = S + A - P; // 64-bit PC-relative offset
-        } else if (type == R_AARCH64_ABS32) {
-            uint32_t* addr_ptr = (uint32_t*)(exec->data_payload + data_offset);
-            *addr_ptr = (uint32_t)(S + A); // Absolute 32-bit address
-        } else if (type == R_AARCH64_ABS16) {
-            uint16_t* addr_ptr = (uint16_t*)(exec->data_payload + data_offset);
-            *addr_ptr = (uint16_t)(S + A); // Absolute 16-bit address
-        } else if (type == R_AARCH64_ADR_PREL_PG_HI21) {
+        } else if (type == R_AARCH64_LDST8_ABS_LO12_NC  || type == R_AARCH64_LDST16_ABS_LO12_NC ||
+                   type == R_AARCH64_LDST32_ABS_LO12_NC || type == R_AARCH64_LDST64_ABS_LO12_NC ||
+                   type == R_AARCH64_LDST128_ABS_LO12_NC) {
+            uint32_t imm12 = (uint32_t)(S + A) & 0xFFF;
+            *instr = (*instr & 0xFFC003FF) | (imm12 << 10);
+        } else if (type == R_AARCH64_ADR_GOT_PAGE || type == R_AARCH64_ADR_PREL_PG_HI21) {
             int64_t offset = (int64_t)(S + A - P);
             uint32_t immlo = (uint32_t)((offset >> 12) & 3);
             uint32_t immhi = (uint32_t)((offset >> 14) & 0x7FFFF);
             *instr = (*instr & 0x9F00001F) | (immlo << 29) | (immhi << 5);
         } else if (type == R_AARCH64_ADD_ABS_LO12_NC) {
             uint32_t imm12 = (uint32_t)(S + A) & 0xFFF;
-            *instr = (*instr & 0xFFFFF000) | imm12;
-        }
-        else {
+            *instr = (*instr & 0xFFC003FF) | (imm12 << 10);
+        } else if (type == R_AARCH64_ABS64) {
+            uint64_t* addr_ptr = (uint64_t*)(exec->data_payload + data_offset + rel->r_offset);
+            *addr_ptr = S + A;
+        } else if (type == R_AARCH64_RELATIVE) {
+            uint64_t* addr_ptr = (uint64_t*)(exec->data_payload + data_offset + rel->r_offset);
+            *addr_ptr = text_segment_base + TOTAL_HEADER_SIZE + text_offset + rel->r_offset + A;
+        } else if (type == R_AARCH64_PREL32) {
+            uint32_t* addr_ptr = (uint32_t*)(exec->data_payload + data_offset + rel->r_offset);
+            *addr_ptr = (uint32_t)(S + A - P);
+        } else if (type == R_AARCH64_PREL64) {
+            uint64_t* addr_ptr = (uint64_t*)(exec->data_payload + data_offset + rel->r_offset);
+            *addr_ptr = S + A - P;
+        } else if (type == R_AARCH64_ABS32) {
+            uint32_t* addr_ptr = (uint32_t*)(exec->data_payload + data_offset + rel->r_offset);
+            *addr_ptr = (uint32_t)(S + A);
+        } else if (type == R_AARCH64_ABS16) {
+            uint16_t* addr_ptr = (uint16_t*)(exec->data_payload + data_offset + rel->r_offset);
+            *addr_ptr = (uint16_t)(S + A);
+        } else {
             printf("Warning: Unsupported relocation type %u\n", type);
         }
     }
+}
 
-    // Update global sizes for the next object to be linked
-    exec->text_payload_size += obj_text_bytes;
-    exec->data_payload_size += obj_data_bytes;
+// Pass 1: record this object's layout offsets and register all defined symbols.
+// Updates exec->text/data_payload_size to account for this object's contribution.
+void ax_execRegisterSymbols(AxExecutable* exec, AxObject* obj) {
+    uint64_t text_offset = exec->text_payload_size;
+    uint64_t data_offset = exec->data_payload_size;
 
-    // 6. Find _start for Entry Point (prefer local definition; fall back to global table)
+    obj->link_text_offset = text_offset;
+    obj->link_data_offset = data_offset;
+
+    uint64_t text_segment_base = TEXT_VADDR;
+    uint64_t data_segment_base = TEXT_VADDR + PAGE_SIZE_EXEC;
+
     uint32_t sym_count = ax_vecSize(obj->symtab);
-    for (uint32_t i = 0; i < sym_count; i++) {
-        if (obj->symtab[i].st_name == 0) continue;
-        const char* name = obj->strtab + obj->symtab[i].st_name;
-        if (strcmp(name, "_start") == 0 && obj->symtab[i].st_shndx != SHN_UNDEF) {
-            exec->entry_point = text_segment_base + total_header_size + text_offset + obj->symtab[i].st_value;
-        }
+    for (uint32_t i = 1; i < sym_count; i++) {
+        Elf64_Sym* sym = &obj->symtab[i];
+        if (sym->st_shndx == SHN_UNDEF) continue;
+        if (sym->st_name == 0) continue;
+        const char* name = obj->strtab + sym->st_name;
+        if (name[0] == '\0') continue;
+
+        uint64_t sym_vaddr;
+        if (sym->st_shndx == obj->data_shndx)
+            sym_vaddr = data_segment_base + data_offset + sym->st_value;
+        else
+            sym_vaddr = text_segment_base + TOTAL_HEADER_SIZE + text_offset + sym->st_value;
+
+        char* name_copy = strdup(name);
+        ax_vecPush(exec->global_sym_names,  name_copy);
+        ax_vecPush(exec->global_sym_vaddrs, sym_vaddr);
+
+        if (strcmp(name, "_start") == 0)
+            exec->entry_point = sym_vaddr;
     }
-    if (exec->entry_point == 0) {
-        uint64_t gaddr = ax_execLookupGlobal(exec, "_start");
-        if (gaddr != 0) exec->entry_point = gaddr;
+
+    exec->text_payload_size += ax_vecSize(obj->text) * sizeof(uint32_t);
+    exec->data_payload_size += ax_vecSize(obj->data);
+}
+
+// Pass 2: copy code/data into the executable buffers and patch all relocations.
+// ax_execRegisterSymbols must have been called for ALL objects before this.
+void ax_execCopyAndPatch(AxExecutable* exec, AxObject* obj) {
+    uint64_t text_offset = obj->link_text_offset;
+    uint64_t data_offset = obj->link_data_offset;
+
+    uint64_t obj_text_bytes = ax_vecSize(obj->text) * sizeof(uint32_t);
+    uint64_t obj_data_bytes = ax_vecSize(obj->data);
+
+    if (obj_text_bytes > 0) {
+        exec->text_payload = realloc(exec->text_payload, text_offset + obj_text_bytes);
+        memcpy(exec->text_payload + text_offset, obj->text, obj_text_bytes);
     }
+    if (obj_data_bytes > 0) {
+        exec->data_payload = realloc(exec->data_payload, data_offset + obj_data_bytes);
+        memcpy(exec->data_payload + data_offset, obj->data, obj_data_bytes);
+    }
+
+    patch_relocations(exec, obj, text_offset, data_offset);
+}
+
+// Convenience wrapper for single-object use.
+void ax_execLink(AxExecutable* exec, AxObject* obj) {
+    ax_execRegisterSymbols(exec, obj);
+    ax_execCopyAndPatch(exec, obj);
 }
 
 bool ax_execWrite(AxExecutable* exec, const char* filename) {

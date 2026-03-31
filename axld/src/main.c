@@ -44,19 +44,35 @@ int main(int argc, char** argv) {
 
     AxExecutable exec;
     ax_execInit(&exec);
-    
-    for (size_t i = 0; i < ax_vecSize(filenames); i++) {
+
+    // Load all objects up front so we can do two-pass linking:
+    // pass 1 registers every symbol before any relocations are patched,
+    // which lets forward cross-file references resolve correctly.
+    size_t n = ax_vecSize(filenames);
+    AxObject* objs = malloc(sizeof(AxObject) * n);
+    size_t obj_count = 0;
+
+    for (size_t i = 0; i < n; i++) {
         const char* filename = filenames[i];
         printf("Processing file: %s\n", filename);
-        AxObject obj;
-        if (!ax_objectLoad(&obj, filename)) {
+        if (!ax_objectLoad(&objs[obj_count], filename)) {
             printf("Error: Failed to load object file %s.\n", filename);
+            free(objs);
             return 1;
         }
-        ax_execLink(&exec, &obj);
-        
-        ax_objectFree(&obj);
+        obj_count++;
     }
+
+    // Pass 1: register all symbols and compute layout offsets.
+    for (size_t i = 0; i < obj_count; i++)
+        ax_execRegisterSymbols(&exec, &objs[i]);
+
+    // Pass 2: copy code/data and patch all relocations.
+    for (size_t i = 0; i < obj_count; i++) {
+        ax_execCopyAndPatch(&exec, &objs[i]);
+        ax_objectFree(&objs[i]);
+    }
+    free(objs);
     
     if (ax_execWrite(&exec, output_filename)) {
         printf("Axiom: Linked executable %s successfully.\n", output_filename);
