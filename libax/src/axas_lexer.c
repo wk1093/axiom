@@ -11,15 +11,15 @@ void ax_lexerFree(AxLexer *lexer) {
     free(lexer);
 }
 
-static char ax_lexerPeek(AxLexer *lexer) {
+char ax_lexerPeek(AxLexer *lexer) {
     return lexer->src[lexer->pos];
 }
 
-static char ax_lexerNext(AxLexer *lexer) {
+char ax_lexerNext(AxLexer *lexer) {
     return lexer->src[lexer->pos++];
 }
 
-static void ax_lexerSkipWhitespace(AxLexer *lexer) {
+void ax_lexerSkipWhitespace(AxLexer *lexer) {
     while (ax_lexerPeek(lexer) == ' ' || ax_lexerPeek(lexer) == '\t') {
         ax_lexerNext(lexer);
     }
@@ -100,6 +100,10 @@ bool encountered_newline = false;
             ax_lexerNext(l);
         }
         size_t len = l->pos - start;
+        if (len == 1 && l->src[start] == '-') {
+            // Handle the case where we have a standalone '-' which is not a valid immediate
+            return (AxToken){.type = TOK_DASH};
+        }
         char *numStr = strndup(&l->src[start], len);
         int imm = atoi(numStr);
         free(numStr);
@@ -169,6 +173,9 @@ bool encountered_newline = false;
         case '.':
             ax_lexerNext(l);
             return (AxToken){.type = TOK_DOT};
+        case '%':
+            ax_lexerNext(l);
+            return (AxToken){.type = TOK_PERCENT};
         default:
             ax_lexerNext(l);
             return (AxToken){.type = TOK_ERROR};

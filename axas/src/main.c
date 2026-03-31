@@ -81,8 +81,8 @@ int main(int argc, char** argv) {
     }
 
     ax_objectWrite(&obj, output_filename);
-    printf("Axiom: Generated %s with %zu instructions from %d file(s).\n",
-           output_filename, ax_vecSize(obj.text), input_count);
+    // printf("Axiom: Generated %s with %zu instructions from %d file(s).\n",
+    //        output_filename, ax_vecSize(obj.text), input_count);
     ax_objectFree(&obj);
     free(input_files);
     if (output_alloc) {

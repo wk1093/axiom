@@ -55,7 +55,7 @@ int main(int argc, char** argv) {
     for (size_t i = 0; i < n; i++) {
         const char* filename = filenames[i];
         if (filename[strlen(filename) - 2] == '.' && filename[strlen(filename) - 1] == 'o') {
-            printf("Loading object file: %s\n", filename);
+            // printf("Loading object file: %s\n", filename);
             if (!ax_objectLoad(&objs[obj_count], filename)) {
                 printf("Error: Failed to load object file %s.\n", filename);
                 free(objs);
@@ -63,7 +63,7 @@ int main(int argc, char** argv) {
             }
             obj_count++;
         } else if (filename[strlen(filename) - 2] == '.' && (filename[strlen(filename) - 1] == 's' || filename[strlen(filename) - 1] == 'S')) {
-            printf("Assembling source file: %s\n", filename);
+            // printf("Assembling source file: %s\n", filename);
             FILE* f = fopen(filename, "r");
             if (!f) {
                 printf("Error: Failed to open source file %s.\n", filename);

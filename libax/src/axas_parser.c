@@ -21,6 +21,10 @@ bool regIs64(const char* reg) {
     return false;
 }
 
+char ax_lexerPeek(AxLexer *lexer);
+char ax_lexerNext(AxLexer *lexer);
+void ax_lexerSkipWhitespace(AxLexer *lexer);
+
 AxParsedUnit ax_parseUnit(AxLexer* l) {
     AxParsedUnit unit = {0};
     AxToken t = ax_lexerNextToken(l);
@@ -40,27 +44,35 @@ AxParsedUnit ax_parseUnit(AxLexer* l) {
     unit.type = (t.type == TOK_DOT) ? UNIT_DIRECTIVE : UNIT_INSTR;
     if (unit.type == UNIT_DIRECTIVE) {
         unit.directive.name = strdup(ax_lexerNextToken(l).str);
-        AxToken value_token = ax_lexerNextToken(l);
-        if (value_token.type == TOK_STRING) {
-            unit.directive.value = strdup(value_token.str);
-        } else if (value_token.type == TOK_IDENT) {
-            unit.directive.value = strdup(value_token.str);
-        } else if (value_token.type == TOK_DOT) {
-            // Handle case like ".section .text"
-            if (ax_lexerPeekToken(l).type == TOK_IDENT) {
-                char buffer[64];
-                snprintf(buffer, sizeof(buffer), ".%s", ax_lexerNextToken(l).str);
-                unit.directive.value = strdup(buffer);
+        char value_buf[512] = {0};
+        ax_lexerSkipWhitespace(l);
+        size_t i = 0;
+        while (ax_lexerPeek(l) != '\n' && ax_lexerPeek(l) != '\0' && i < sizeof(value_buf) - 1) {
+            if (ax_lexerPeek(l) == '"') {
+                // our lexer has code to handle string literals, so we can just use that instead of duplicating code
+                AxToken strToken = ax_lexerNextToken(l);
+                if (strToken.type == TOK_STRING) {
+                    // Append the string literal to the value buffer
+                    size_t str_len = strlen(strToken.str);
+                    if (i + str_len < sizeof(value_buf)) {
+                        memcpy(&value_buf[i], strToken.str, str_len);
+                        i += str_len;
+                    } else {
+                        printf("Error: Directive value too long when appending string literal\n");
+                        break;
+                    }
+                } else {
+                    printf("Error: Expected string literal (wtf)\n");
+                    break;
+                }
             } else {
-                // Handle error: expected identifier after dot
-                printf("Error: Expected identifier after '.' in directive\n");
-                unit.directive.value = NULL;
+                value_buf[i++] = ax_lexerPeek(l);
+                ax_lexerNext(l);
             }
-        } else {
-            // Handle error: expected string or identifier after directive
-            printf("Error: Expected string or identifier after directive\n");
-            unit.directive.value = NULL;
         }
+        value_buf[i] = '\0';
+        
+        unit.directive.value = strdup(value_buf);
         return unit;
     }
     strncpy(unit.instr.mnem, t.str, 15);

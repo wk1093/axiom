@@ -5,6 +5,7 @@ newline: .asciz "\n"
 .section .text
 
 .global puts
+.type puts, %function
 puts:
             stp x20, x30, [sp, #-16]!
             mov x29, sp
@@ -28,3 +29,4 @@ puts:
 
             ldp x29, x30, [sp], #16
             ret
+.size puts, .-puts

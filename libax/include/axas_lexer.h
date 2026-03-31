@@ -20,6 +20,8 @@ typedef enum {
     TOK_NEWLINE,
     TOK_DOT,     // . (for directives and section names)
     TOK_STRING,  // "Hello, world!\n"
+    TOK_PERCENT, // % (for local labels)
+    TOK_DASH,    // - (for .-label in directives)
     TOK_EOF,
     TOK_ERROR
 } AxTokType;

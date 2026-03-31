@@ -51,7 +51,7 @@ int main(int argc, char** argv) {
 
     for (size_t i = 0; i < n; i++) {
         const char* filename = filenames[i];
-        printf("Processing file: %s\n", filename);
+        // printf("Processing file: %s\n", filename);
         if (!ax_objectLoad(&objs[obj_count], filename)) {
             printf("Error: Failed to load object file %s.\n", filename);
             free(objs);
@@ -72,7 +72,7 @@ int main(int argc, char** argv) {
     free(objs);
     
     if (ax_execWrite(&exec, output_filename)) {
-        printf("Axiom: Linked executable %s successfully.\n", output_filename);
+        // printf("Axiom: Linked executable %s successfully.\n", output_filename);
     } else {
         printf("Axiom: Failed to write executable %s.\n", output_filename);
     }

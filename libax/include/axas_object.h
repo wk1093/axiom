@@ -45,6 +45,12 @@ uint32_t ax_objectGetSymbolIndex(AxObject* obj, const char* name);
 void ax_objectWrite(AxObject* obj, const char* filename);
 bool ax_objectLoad(AxObject* obj, const char* filename);
 
+// Directive handlers
+void ax_objectDeclareGlobal(AxObject* obj, const char* name);
+void ax_objectDeclareExternal(AxObject* obj, const char* name);
+void ax_objectSetSymbolSize(AxObject* obj, const char* value);
+void ax_objectSetSymbolType(AxObject* obj, const char* value);
+
 void ax_printObjectInfo(AxObject* obj);
 
 #endif

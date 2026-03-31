@@ -156,6 +156,109 @@ void ax_objectDefineCodeLabel(AxObject* obj, const char* name) {
     }
 }
 
+// .global: ensure symbol has global binding; creates a placeholder if not yet defined.
+void ax_objectDeclareGlobal(AxObject* obj, const char* name) {
+    uint32_t idx = ax_objectGetSymbolIndex(obj, name);
+    if (idx != 0) {
+        Elf64_Sym* sym = &obj->symtab[idx];
+        uint8_t type = ELF64_ST_TYPE(sym->st_info);
+        sym->st_info = ELF64_ST_INFO(STB_GLOBAL, type);
+    } else {
+        // Placeholder; filled in when the label is actually defined.
+        uint32_t name_off = ax_objectAddString(obj, name);
+        Elf64_Sym sym = {0};
+        sym.st_name  = name_off;
+        sym.st_info  = ELF64_ST_INFO(STB_GLOBAL, STT_NOTYPE);
+        sym.st_shndx = SHN_UNDEF;
+        ax_vecPush(obj->symtab, sym);
+    }
+}
+
+// .extern: declare an external (undefined) symbol so it can be referenced before linking.
+void ax_objectDeclareExternal(AxObject* obj, const char* name) {
+    if (ax_objectGetSymbolIndex(obj, name) == 0) {
+        uint32_t name_off = ax_objectAddString(obj, name);
+        Elf64_Sym sym = {0};
+        sym.st_name  = name_off;
+        sym.st_info  = ELF64_ST_INFO(STB_GLOBAL, STT_NOTYPE);
+        sym.st_shndx = SHN_UNDEF;
+        ax_vecPush(obj->symtab, sym);
+    }
+}
+
+char nextNonWhitespace(const char* str, size_t* start) {
+    size_t i = *start;
+    while (str[i] == ' ' || str[i] == '\t' || str[i] == '\n') {
+        i++;
+    }
+    *start = i;
+    return str[i];
+}
+
+void ax_objectSetSymbolSize(AxObject* obj, const char* value) {
+    // first separate sym from N
+    char name[256] = {0};
+    size_t i = 0;
+    while (value[i] != ',' && value[i] != '\0' && i < sizeof(name) - 1) {
+        name[i] = value[i];
+        i++;
+    }
+    name[i] = '\0';
+    if (value[i] == ',') {
+        i++; // skip comma
+        size_t size_start = i;
+        char next = nextNonWhitespace(value, &size_start);
+        if (next == '\0') return; // No size provided
+        if (next == '.') {
+            if (nextNonWhitespace(value, &size_start) == '-') {
+                // we have .-sym
+                char sym_name[256] = {0};
+                size_t j = 0;
+                while (value[size_start] != '\0' && value[size_start] != ' ' && value[size_start] != '\t' && j < sizeof(sym_name) - 1) {
+                    sym_name[j] = value[size_start];
+                    size_start++;
+                    j++;
+                }
+                sym_name[j] = '\0';
+                uint32_t sym_idx = ax_objectGetSymbolIndex(obj, sym_name);
+                if (sym_idx != 0) {
+                    Elf64_Sym* sym = &obj->symtab[sym_idx];
+                    uint64_t sym_end = sym->st_value + sym->st_size;
+                    uint32_t target_idx = ax_objectGetSymbolIndex(obj, name);
+                    if (target_idx != 0) {
+                        obj->symtab[target_idx].st_size = sym_end - obj->symtab[target_idx].st_value;
+                    }
+                }
+            }
+        } else {
+            // we have a direct size value
+            uint64_t size = strtoull(&value[size_start], NULL, 0);
+            uint32_t target_idx = ax_objectGetSymbolIndex(obj, name);
+            if (target_idx != 0) {
+                obj->symtab[target_idx].st_size = size;
+            }
+        }
+    }
+}
+
+// .type sym, @type — value format after parser fix: "sym, function" or "sym, object".
+// The '@' prefix is stripped by the parser (TOK_ERROR) so only the type word remains.
+void ax_objectSetSymbolType(AxObject* obj, const char* value) {
+    char name[256] = {0};
+    char type_str[64] = {0};
+    if (sscanf(value, " %255[^,], %63s", name, type_str) == 2) {
+        uint32_t idx = ax_objectGetSymbolIndex(obj, name);
+        if (idx != 0) {
+            Elf64_Sym* sym = &obj->symtab[idx];
+            uint8_t bind = ELF64_ST_BIND(sym->st_info);
+            uint8_t type = STT_NOTYPE;
+            if (strcmp(type_str, "function") == 0) type = STT_FUNC;
+            else if (strcmp(type_str, "object") == 0)  type = STT_OBJECT;
+            sym->st_info = ELF64_ST_INFO(bind, type);
+        }
+    }
+}
+
 size_t align_to(size_t current, size_t alignment) {
     if (alignment == 0) return current;
     return (current + alignment - 1) & ~(alignment - 1);
@@ -384,9 +487,9 @@ bool ax_objectLoad(AxObject* obj, const char* filename) {
 
 void ax_printObjectInfo(AxObject* obj) {
     printf("Object Info:\n");
-    printf("  .text: %u bytes\n", ax_vecSize(obj->text) * sizeof(uint32_t));
-    printf("  .data: %u bytes\n", ax_vecSize(obj->data));
-    printf("  .strtab: %u bytes\n", ax_vecSize(obj->strtab));
-    printf("  .symtab: %u entries\n", ax_vecSize(obj->symtab));
-    printf("  .reltab: %u entries\n", ax_vecSize(obj->reltab));
+    printf("  .text: %lu bytes\n", ax_vecSize(obj->text) * sizeof(uint32_t));
+    printf("  .data: %lu bytes\n", ax_vecSize(obj->data));
+    printf("  .strtab: %lu bytes\n", ax_vecSize(obj->strtab));
+    printf("  .symtab: %lu entries\n", ax_vecSize(obj->symtab));
+    printf("  .reltab: %lu entries\n", ax_vecSize(obj->reltab));
 }

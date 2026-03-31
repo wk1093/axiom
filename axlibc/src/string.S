@@ -1,5 +1,6 @@
 .section .text
 .global strlen
+.type strlen, %function
 strlen:
             mov x1, x0
 strlen_loop:
@@ -10,3 +11,4 @@ strlen_loop:
 strlen_done:
             sub x0, x1, x0
             ret
+.size strlen, .-strlen
