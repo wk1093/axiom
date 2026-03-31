@@ -58,6 +58,7 @@ void ax_objectEmit(AxObject* obj, AxIrInstr* instr) {
             if (instr->opcode == OP_B)    reloc_type = R_AARCH64_JUMP26;
             if (instr->opcode == OP_CBZ || instr->opcode == OP_CBZ_64) reloc_type = R_AARCH64_CONDBR19;
             if (instr->opcode == OP_ADRP) reloc_type = R_AARCH64_ADR_PREL_PG_HI21;
+            if (instr->opcode == OP_BNE) reloc_type = R_AARCH64_CONDBR19; // BNE is also a conditional branch, so it can use the same relocation type as CBZ/CBNZ
 
             // Add more as needed...
 
