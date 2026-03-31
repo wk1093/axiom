@@ -64,9 +64,10 @@ New instructions can be added by only modifying two different places:
 - libax/src/axas_assembler.c: If the instruction has any special rules about how it is assembled.
 
 ## TODO
-- [ ] Add more instructions to assembler
-- [ ] Add support for all sections (.rodata, .bss, etc.)
-- [ ] Add support for multiple object files
-- [ ] Add supprt for .a library files (statically linked)
-- [ ] HARD: Add support for dynamically linking
-- [ ] HARD: Write C compiler
+- [ ] **AXLIBC**: Add support for arguments (stdlib stuff)
+- [ ] **AXAS**: Add more instructions to assembler
+- [ ] **AXAS/AXLD**: Add support for all sections (.rodata, .bss, etc.)
+- [x] **AXLD**: Add support for multiple object files
+- [ ] **AXLD**: Add supprt for .a library files (statically linked)
+- [ ] **AXLD**: HARD: Add support for dynamically linking
+- [ ] **AXCC**: HARD: Write C compiler
