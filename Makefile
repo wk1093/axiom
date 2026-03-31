@@ -1,6 +1,6 @@
 include config.mk
 
-SUBDIRS = axas axld libax
+SUBDIRS = axas axld libax axlibc
 
 .PHONY: all $(SUBDIRS)
 
@@ -105,8 +105,8 @@ bin/stdlib_%_axas.o: tests/stdlib/%.S axas | bin
 bin/stdlib_%_gcc_ld: bin/stdlib_%_gcc.o | bin
 	-$(CC) $(CFLAGS) $< -o $@
 
-bin/stdlib_%_axas_axld: bin/stdlib_%_axas.o | bin
-	-$(RUNNER) axld/bin/axld -o $@ $< -l $(LIBC)
+bin/stdlib_%_axas_axld: bin/stdlib_%_axas.o | bin axlibc
+	-$(RUNNER) axld/bin/axld -o $@ axlibc/bin/libc.o $<
 	-chmod +x $@
 
 STDLIB_SINGLES := $(patsubst tests/stdlib/%.S,%,$(wildcard tests/stdlib/*.S))
