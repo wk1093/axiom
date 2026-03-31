@@ -165,6 +165,13 @@ void ax_assemble(AxObject* obj, AxLexer* lexer) {
                 }
                 break;
             case UNIT_DIRECTIVE:
+                uint8_t* cur_sec = NULL;
+                switch (current_section) {
+                    case SECTION_TEXT: cur_sec = (uint8_t*)obj->text; break;
+                    case SECTION_DATA: cur_sec = obj->data; break;
+                    case SECTION_BSS: cur_sec = obj->data; break;
+                    case SECTION_RODATA: cur_sec = obj->data; break;
+                }
                 if (strcmp(unit.directive.name, "section") == 0) {
                     if (strcmp(unit.directive.value, ".text") == 0) {
                         current_section = SECTION_TEXT;
@@ -181,36 +188,36 @@ void ax_assemble(AxObject* obj, AxLexer* lexer) {
                     // Handle .asciz directive (null-terminated string)
                     size_t str_len = strlen(unit.directive.value);
                     for (size_t i = 0; i < str_len; i++) {
-                        ax_vecPush(obj->data, unit.directive.value[i]);
+                        ax_vecPush(cur_sec, unit.directive.value[i]);
                     }
-                    ax_vecPush(obj->data, '\0'); // Null terminator
+                    ax_vecPush(cur_sec, '\0'); // Null terminator
                 } else if (strcmp(unit.directive.name, "byte") == 0) {
                     uint8_t val = (uint8_t)strtoul(unit.directive.value, NULL, 0);
-                    ax_vecPush(obj->data, val);
+                    ax_vecPush(cur_sec, val);
                 } else if (strcmp(unit.directive.name, "2byte") == 0 || strcmp(unit.directive.name, "hword") == 0) {
                     // Handle .2byte/.hword directive (16-bit value)
                     uint16_t val = (uint16_t)strtoul(unit.directive.value, NULL, 0);
-                    ax_vecPush(obj->data, val & 0xFF);
-                    ax_vecPush(obj->data, (val >> 8) & 0xFF);
+                    ax_vecPush(cur_sec, val & 0xFF);
+                    ax_vecPush(cur_sec, (val >> 8) & 0xFF);
                 } else if (strcmp(unit.directive.name, "4byte") == 0 || strcmp(unit.directive.name, "word") == 0) {
                     // Handle .4byte/.word directive (32-bit value)
                     uint32_t val = (uint32_t)strtoul(unit.directive.value, NULL, 0);
-                    ax_vecPush(obj->data, val & 0xFF);
-                    ax_vecPush(obj->data, (val >> 8) & 0xFF);
-                    ax_vecPush(obj->data, (val >> 16) & 0xFF);
-                    ax_vecPush(obj->data, (val >> 24) & 0xFF);
+                    ax_vecPush(cur_sec, val & 0xFF);
+                    ax_vecPush(cur_sec, (val >> 8) & 0xFF);
+                    ax_vecPush(cur_sec, (val >> 16) & 0xFF);
+                    ax_vecPush(cur_sec, (val >> 24) & 0xFF);
                 } else if (strcmp(unit.directive.name, "8byte") == 0 || strcmp(unit.directive.name, "quad") == 0) {
                     // Handle .8byte/.quad directive (64-bit value)
                     uint64_t val = strtoull(unit.directive.value, NULL, 0);
                     for (int i = 0; i < 8; i++) {
-                        ax_vecPush(obj->data, (val >> (i * 8)) & 0xFF);
+                        ax_vecPush(cur_sec, (val >> (i * 8)) & 0xFF);
                     }
                 } else if (strcmp(unit.directive.name, "align") == 0) {
                     // Handle .align directive
                     size_t alignment = strtoul(unit.directive.value, NULL, 0);
-                    size_t padding = (alignment - (ax_vecSize(obj->data) % alignment)) % alignment;
+                    size_t padding = (alignment - (ax_vecSize(cur_sec) % alignment)) % alignment;
                     for (size_t i = 0; i < padding; i++) {
-                        ax_vecPush(obj->data, 0); // Pad with zeros
+                        ax_vecPush(cur_sec, 0); // Pad with zeros
                     }
                 } else if (strcmp(unit.directive.name, "global") == 0) {
                     ax_objectDeclareGlobal(obj, unit.directive.value);
@@ -224,7 +231,7 @@ void ax_assemble(AxObject* obj, AxLexer* lexer) {
                     // Handle .string directive (non-null-terminated string)
                     size_t str_len = strlen(unit.directive.value);
                     for (size_t i = 0; i < str_len; i++) {
-                        ax_vecPush(obj->data, unit.directive.value[i]);
+                        ax_vecPush(cur_sec, unit.directive.value[i]);
                     }
                 } else {
                     printf("Error: Unknown directive '%s'\n", unit.directive.name);
