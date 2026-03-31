@@ -5,7 +5,7 @@ TARGET = $(OBJDIR)/axld
 LIB_PATH = $(ROOT_DIR)/libax/$(OBJDIR)/libax.a
 
 # add include for this project
-INCLUDES += -I$(ROOT_DIR)/axld/include -I$(ROOT_DIR)/axas/include
+INCLUDES += -I$(ROOT_DIR)/axld/include
 
 SRCS = $(wildcard $(SRCDIR)/*.c)
 OBJS = $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(SRCS))

@@ -33,9 +33,6 @@ int main(int argc, char** argv) {
         output_filename = "a.out";
     }
     
-    
-
-
     // AxObject obj;
     // if (!ax_objectLoad(&obj, filename)) {
     //     printf("Error: Failed to load object file %s.\n", filename);
