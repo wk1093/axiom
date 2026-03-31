@@ -1,4 +1,4 @@
-.section .data
+.section .rodata
 
 newline: .asciz "\n"
 

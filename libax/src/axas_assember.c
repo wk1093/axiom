@@ -136,7 +136,16 @@ AxOpcode ax_resolveOpcode(AxParsedUnit* unit) {
         } else {
             return unit->instr.args[0].is_64 ? OP_ADDS_64 : OP_ADDS_32;
         }
-    } else {
+    } else if (strcmp(unit->instr.mnem, "cmp") == 0) {
+        if (unit->instr.args[1].type == ARG_IMM) {
+            return unit->instr.args[0].is_64 ? OP_SUBS_IMM_64 : OP_SUBS_IMM_32; // CMP is actually a SUBS that updates flags
+        } else {
+            return unit->instr.args[0].is_64 ? OP_SUBS_64 : OP_SUBS_32; // CMP is actually a SUBS that updates flags
+        }
+    } else if (strcmp(unit->instr.mnem, "bne") == 0) {
+        return OP_BNE;
+    }
+    else {
         // For other instructions, we can do a simple linear search
         for (int i = 0; i < OP_COUNT; i++) {
             if (strcmp(unit->instr.mnem, ax_opcodeToMnem((AxOpcode)i)) == 0) {
@@ -150,7 +159,7 @@ AxOpcode ax_resolveOpcode(AxParsedUnit* unit) {
 }
 
 void ax_assemble(AxObject* obj, AxLexer* lexer) {
-    AxSection current_section = SECTION_DATA; // Default to .data for simplicity
+    AxSection current_section = SECTION_DATA;
     while (true) {
         AxParsedUnit unit = ax_parseUnit(lexer);
 
@@ -164,13 +173,18 @@ void ax_assemble(AxObject* obj, AxLexer* lexer) {
                     ax_objectDefineDataLabel(obj, unit.label);
                 }
                 break;
-            case UNIT_DIRECTIVE:
-                uint8_t* cur_sec = NULL;
+            case UNIT_DIRECTIVE: {
+                uint8_t* cur_sec = obj->data;
+                AxSection sec_before = current_section;
                 switch (current_section) {
                     case SECTION_TEXT: cur_sec = (uint8_t*)obj->text; break;
                     case SECTION_DATA: cur_sec = obj->data; break;
                     case SECTION_BSS: cur_sec = obj->data; break;
                     case SECTION_RODATA: cur_sec = obj->data; break;
+                    default:
+                        printf("Error: Invalid section\n");
+                        cur_sec = obj->data; // Fallback to data
+                        break;
                 }
                 if (strcmp(unit.directive.name, "section") == 0) {
                     if (strcmp(unit.directive.value, ".text") == 0) {
@@ -236,7 +250,16 @@ void ax_assemble(AxObject* obj, AxLexer* lexer) {
                 } else {
                     printf("Error: Unknown directive '%s'\n", unit.directive.name);
                 }
+                // WE NEED to assign cursec back to the section vector, becuase push might have changed the pointer
+                switch (sec_before) {
+                    case SECTION_TEXT: obj->text = (uint32_t*)cur_sec; break;
+                    case SECTION_DATA: obj->data = cur_sec; break;
+                    case SECTION_BSS: obj->data = cur_sec; break;
+                    case SECTION_RODATA: obj->data = cur_sec; break;
+                    default: break; // Should never happen
+                }
                 break;
+            }
             case UNIT_INSTR:
                 AxIrInstr ir = {0};
                 ir.opcode = ax_resolveOpcode(&unit);
