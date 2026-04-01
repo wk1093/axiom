@@ -30,6 +30,9 @@ typedef struct {
     // parallel arrays mapping names -> resolved virtual addresses
     char**    global_sym_names;   // owns the strings (strdup'd)
     uint64_t* global_sym_vaddrs;
+
+    // Undefined symbols
+    char** undefined_sym_names; // owns the strings (strdup'd)
 } AxExecutable;
 
 void ax_execInit(AxExecutable* exec);

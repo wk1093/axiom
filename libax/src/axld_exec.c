@@ -14,6 +14,7 @@ void ax_execInit(AxExecutable* exec) {
 
     exec->global_sym_names  = ax_vecNew(char*);
     exec->global_sym_vaddrs = ax_vecNew(uint64_t);
+    exec->undefined_sym_names = ax_vecNew(char*);
 }
 
 void ax_execFree(AxExecutable* exec) {
@@ -23,6 +24,7 @@ void ax_execFree(AxExecutable* exec) {
         free(exec->global_sym_names[i]);
     ax_vecFree(exec->global_sym_names);
     ax_vecFree(exec->global_sym_vaddrs);
+    ax_vecFree(exec->undefined_sym_names);
 }
 
 // Look up a symbol by name in the global symbol table.
@@ -121,6 +123,33 @@ static void patch_relocations(AxExecutable* exec, AxObject* obj,
     }
 }
 
+void find_undefined_symbols(AxExecutable* exec, AxObject* obj) {
+    uint32_t rel_count = ax_vecSize(obj->reltab);
+    for (uint32_t i = 0; i < rel_count; i++) {
+        Elf64_Rela* rel = &obj->reltab[i];
+        uint32_t sym_idx = ELF64_R_SYM(rel->r_info);
+        Elf64_Sym* target_sym = &obj->symtab[sym_idx];
+        if (target_sym->st_shndx == SHN_UNDEF) {
+            const char* sym_name = obj->strtab + target_sym->st_name;
+            char* name_copy = strdup(sym_name);
+            ax_vecPush(exec->undefined_sym_names, name_copy);
+        }
+    }
+}
+
+void clear_defined_symbols_from_undefined(AxExecutable* exec) {
+    size_t i = 0;
+    while (i < ax_vecSize(exec->undefined_sym_names)) {
+        char* sym_name = exec->undefined_sym_names[i];
+        if (ax_execLookupGlobal(exec, sym_name) != 0) {
+            free(sym_name);
+            ax_vecRemoveAt(exec->undefined_sym_names, i);
+        } else {
+            i++;
+        }
+    }
+}
+
 // Pass 1: record this object's layout offsets and register all defined symbols.
 // Updates exec->text/data_payload_size to account for this object's contribution.
 void ax_execRegisterSymbols(AxExecutable* exec, AxObject* obj) {
@@ -157,6 +186,9 @@ void ax_execRegisterSymbols(AxExecutable* exec, AxObject* obj) {
 
     exec->text_payload_size += ax_vecSize(obj->text) * sizeof(uint32_t);
     exec->data_payload_size += ax_vecSize(obj->data);
+
+    find_undefined_symbols(exec, obj);
+    clear_defined_symbols_from_undefined(exec);
 }
 
 // Pass 2: copy code/data into the executable buffers and patch all relocations.
