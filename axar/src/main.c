@@ -12,24 +12,21 @@ int main(int argc, char *argv[]) {
     
     FILE *ar_file;
     if (argc == 2) {
-        ar_file = fopen(argv[1], "r");
-    } else {
-        ar_file = fopen(argv[1], "w");
+        AxArchive ar;
+        if (!axar_read_archive(argv[1], &ar)) return 1;
+        printf("Members: %zu, Symbols: %zu\n", ar.num_members, ar.num_symbols);
+        for (size_t i = 0; i < ar.num_symbols; i++)
+            printf("  %s -> member %u\n", ar.symtab[i].name, ar.symtab[i].member_idx);
+        axar_archive_free(&ar);
+        return 0;
     }
+
+    ar_file = fopen(argv[1], "w");
     if (!ar_file) {
         perror("fopen");
         return 1;
     }
-
-    if (argc == 2) {
-        fprintf(stderr, "No object files provided\n");
-        axar_read_archive(ar_file);
-        fclose(ar_file);
-        return 1;
-    }
-
     axar_write_archive(ar_file, &argv[2], argc - 2);
-
     fclose(ar_file);
 
     return 0;

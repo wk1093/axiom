@@ -144,38 +144,158 @@ void axar_write_archive(FILE *ar_file, char *obj_files[], int num_obj_files) {
     free(valid);
 }
 
-void axar_read_archive(FILE *ar_file) {
+// ---------------------------------------------------------------------------
+// Reading
+// ---------------------------------------------------------------------------
+
+bool axar_read_archive(const char* path, AxArchive* out) {
+    FILE* f = fopen(path, "rb");
+    if (!f) { perror("axar_read_archive: fopen"); return false; }
+
     char magic[AXAR_MAGIC_LEN];
-    fread(magic, 1, AXAR_MAGIC_LEN, ar_file);
-    if (strncmp(magic, AXAR_MAGIC, AXAR_MAGIC_LEN) != 0) {
-        fprintf(stderr, "Not a valid archive file\n");
-        return;
+    if (fread(magic, 1, AXAR_MAGIC_LEN, f) != AXAR_MAGIC_LEN ||
+        memcmp(magic, AXAR_MAGIC, AXAR_MAGIC_LEN) != 0) {
+        fprintf(stderr, "axar_read_archive: %s is not a valid archive\n", path);
+        fclose(f);
+        return false;
     }
 
-    printf("Is a valid archive file\n");
+    // We do two sub-passes:
+    //   sub-pass A: record (offset, size) of every regular member
+    //   sub-pass B: load each member as an AxObject via tmpfile
+    // The symtab '/' member (if present and first) is parsed for symbol info.
 
-    struct ar_header header;
-    while (fread(&header, sizeof(struct ar_header), 1, ar_file) == 1) {
-        long size = strtol(header.ar_size, NULL, 10);
+    // -- Sub-pass A: scan all headers --
+    typedef struct { long data_offset; long size; } MemberLoc;
+    MemberLoc* locs = NULL;
+    size_t locs_cap = 0, locs_n = 0;
 
-        if (strncmp(header.ar_fmag, "`\n", 2) != 0) {
-            fprintf(stderr, "Invalid header file magic\n");
-            return;
+    // Symtab raw data (big-endian)
+    uint8_t* sym_raw   = NULL;
+    long     sym_raw_n = 0;
+
+    struct ar_header hdr;
+    while (fread(&hdr, sizeof(hdr), 1, f) == 1) {
+        if (memcmp(hdr.ar_fmag, "`\n", 2) != 0) {
+            fprintf(stderr, "axar_read_archive: bad member magic\n");
+            break;
         }
+        long size = strtol(hdr.ar_size, NULL, 10);
+        long data_start = ftell(f);
 
-        if (strncmp(header.ar_name, "/ ", 2) == 0) {
-            printf("Symbol lookup table found\n");
-            // TODO: process symbol table
+        if (hdr.ar_name[0] == '/') {
+            // Symbol index member
+            sym_raw = malloc(size);
+            sym_raw_n = size;
+            if (fread(sym_raw, 1, size, f) != (size_t)size) {
+                free(sym_raw); sym_raw = NULL; sym_raw_n = 0;
+            }
         } else {
-            printf("File: %.*s, size: %ld\n", (int)sizeof(header.ar_name), header.ar_name, size);
+            // Regular object member
+            if (locs_n == locs_cap) {
+                locs_cap = locs_cap ? locs_cap * 2 : 8;
+                locs = realloc(locs, locs_cap * sizeof(MemberLoc));
+            }
+            locs[locs_n++] = (MemberLoc){ data_start, size };
+            fseek(f, size, SEEK_CUR);
         }
-
-        // TODO: read file content
-        fseek(ar_file, size, SEEK_CUR);
-
-        // even byte alignment
-        if (size % 2 != 0) {
-            fseek(ar_file, 1, SEEK_CUR);
-        }
+        if (size % 2 != 0) fseek(f, 1, SEEK_CUR);
     }
+
+    // -- Sub-pass B: load each member as an AxObject --
+    out->members     = malloc(locs_n * sizeof(AxObject));
+    out->num_members = 0;
+
+    char buf[4096];
+    for (size_t i = 0; i < locs_n; i++) {
+        // Write member data to a temp file so ax_objectLoad can parse ELF
+        FILE* tmp = tmpfile();
+        fseek(f, locs[i].data_offset, SEEK_SET);
+        long remaining = locs[i].size;
+        while (remaining > 0) {
+            size_t chunk = remaining < (long)sizeof(buf) ? (size_t)remaining : sizeof(buf);
+            size_t nr = fread(buf, 1, chunk, f);
+            if (nr == 0) break;
+            fwrite(buf, 1, nr, tmp);
+            remaining -= (long)nr;
+        }
+        rewind(tmp);
+
+        // ax_objectLoad reads from a path — re-open via /proc/self/fd on Linux
+        int fd = fileno(tmp);
+        char fd_path[64];
+        snprintf(fd_path, sizeof(fd_path), "/proc/self/fd/%d", fd);
+
+        AxObject* obj = &out->members[out->num_members];
+        ax_objectInit(obj);
+        if (ax_objectLoad(obj, fd_path)) {
+            out->num_members++;
+        } else {
+            fprintf(stderr, "axar_read_archive: failed to load member %zu\n", i);
+        }
+        fclose(tmp);
+    }
+
+    // -- Parse symtab to build AxArSymEntry array --
+    out->symtab     = NULL;
+    out->num_symbols = 0;
+
+    if (sym_raw && sym_raw_n >= 4) {
+        uint32_t nsym;
+        memcpy(&nsym, sym_raw, 4);
+        nsym = ntohl(nsym);
+
+        if ((long)(4 + 4 * nsym) <= sym_raw_n) {
+            out->symtab     = malloc(nsym * sizeof(AxArSymEntry));
+            out->num_symbols = 0;
+
+            // Offsets array (big-endian u32) maps symbol -> file offset of member header.
+            // We need to translate file offset -> member index using locs[].
+            uint32_t* offsets = (uint32_t*)(sym_raw + 4);
+            const char* names = (const char*)(sym_raw + 4 + 4 * nsym);
+
+            for (uint32_t s = 0; s < nsym; s++) {
+                uint32_t file_off = ntohl(offsets[s]);
+
+                // Find which member has its ar_header at file_off.
+                // The ar_header is sizeof(struct ar_header)=60 bytes before data.
+                long data_off = (long)file_off + (long)sizeof(struct ar_header);
+                size_t midx = SIZE_MAX;
+                for (size_t m = 0; m < locs_n; m++) {
+                    if (locs[m].data_offset == data_off) { midx = m; break; }
+                }
+
+                out->symtab[out->num_symbols++] = (AxArSymEntry){
+                    .name       = strdup(names),
+                    .member_idx = (uint32_t)midx,
+                };
+                names += strlen(names) + 1;
+            }
+        }
+        free(sym_raw);
+    }
+
+    free(locs);
+    fclose(f);
+    return true;
+}
+
+void axar_archive_free(AxArchive* ar) {
+    for (size_t i = 0; i < ar->num_members; i++)
+        ax_objectFree(&ar->members[i]);
+    free(ar->members);
+    for (size_t i = 0; i < ar->num_symbols; i++)
+        free(ar->symtab[i].name);
+    free(ar->symtab);
+    ar->members     = NULL;
+    ar->symtab      = NULL;
+    ar->num_members = 0;
+    ar->num_symbols = 0;
+}
+
+size_t axar_find_symbol(const AxArchive* ar, const char* name) {
+    for (size_t i = 0; i < ar->num_symbols; i++)
+        if (strcmp(ar->symtab[i].name, name) == 0)
+            return ar->symtab[i].member_idx;
+    return SIZE_MAX;
 }

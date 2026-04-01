@@ -230,5 +230,13 @@ void ax_printToken(AxToken token) {
         case TOK_STRING:
             printf("STRING(\"%s\")", token.str);
             break;
+        case TOK_PERCENT:
+            printf("PERCENT");
+            break;
+        case TOK_DASH:
+            printf("DASH");
+            break;
+        default:
+            printf("UNKNOWN");
     }
 }

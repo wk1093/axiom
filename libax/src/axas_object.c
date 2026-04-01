@@ -325,6 +325,49 @@ void ax_objectWrite(AxObject* obj, const char* filename) {
     
     obj->ehdr.e_shoff = current_off;
 
+    // ELF requires all STB_LOCAL symbols to precede STB_GLOBAL/STB_WEAK in
+    // the symtab, with sh_info set to the index of the first non-local.
+    // Partition the symtab in-place (keeping null sym at index 0).
+    size_t nsyms = ax_vecSize(obj->symtab);
+    Elf64_Sym* sorted = malloc(nsyms * sizeof(Elf64_Sym));
+    uint32_t*  old_to_new = malloc(nsyms * sizeof(uint32_t));
+
+    // Index 0 is always the null sym (local)
+    sorted[0] = obj->symtab[0];
+    old_to_new[0] = 0;
+    uint32_t local_count = 1;
+    uint32_t global_count = 0;
+
+    // Count locals and globals (skip null at 0)
+    for (size_t i = 1; i < nsyms; i++) {
+        if (ELF64_ST_BIND(obj->symtab[i].st_info) == STB_LOCAL) local_count++;
+        else global_count++;
+    }
+
+    // Fill locals then globals
+    uint32_t li = 1, gi = local_count;
+    for (size_t i = 1; i < nsyms; i++) {
+        if (ELF64_ST_BIND(obj->symtab[i].st_info) == STB_LOCAL) {
+            sorted[li] = obj->symtab[i];
+            old_to_new[i] = li++;
+        } else {
+            sorted[gi] = obj->symtab[i];
+            old_to_new[i] = gi++;
+        }
+    }
+
+    // Apply the remapping to the relocation table
+    for (size_t i = 0; i < ax_vecSize(obj->reltab); i++) {
+        uint32_t old_sym = (uint32_t)ELF64_R_SYM(obj->reltab[i].r_info);
+        uint32_t type    = (uint32_t)ELF64_R_TYPE(obj->reltab[i].r_info);
+        obj->reltab[i].r_info = ELF64_R_INFO(old_to_new[old_sym], type);
+    }
+
+    // Replace symtab contents with sorted version
+    memcpy(obj->symtab, sorted, nsyms * sizeof(Elf64_Sym));
+    free(sorted);
+    free(old_to_new);
+
     Elf64_Shdr shdr[6] = {0};
 
     // .text
@@ -349,7 +392,7 @@ void ax_objectWrite(AxObject* obj, const char* filename) {
     shdr[3].sh_offset    = sym_off;
     shdr[3].sh_size      = symtab_sz;
     shdr[3].sh_link      = 4; // Link to .strtab
-    shdr[3].sh_info      = 1; // First non-local symbol index
+    shdr[3].sh_info      = local_count; // index of first global symbol
     shdr[3].sh_entsize   = sizeof(Elf64_Sym);
     shdr[3].sh_addralign = 8;
 
