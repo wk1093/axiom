@@ -1,6 +1,6 @@
 include config.mk
 
-SUBDIRS = axas axld libax axlibc axcc
+SUBDIRS = axas axld libax axlibc axcc axar
 
 .PHONY: all $(SUBDIRS)
 

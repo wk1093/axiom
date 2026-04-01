@@ -80,7 +80,9 @@ void ax_objectDefineDataLabel(AxObject* obj, const char* name) {
         Elf64_Sym* sym = &obj->symtab[existing_idx];
         sym->st_value = offset;
         sym->st_shndx = 2; // Point to .data
-        sym->st_info  = ELF64_ST_INFO(STB_GLOBAL, STT_OBJECT);
+        // sym->st_info  = ELF64_ST_INFO(STB_GLOBAL, STT_OBJECT);
+        // don't default to global anymore, now that we have .global directive to control that
+        sym->st_info  = ELF64_ST_INFO(ELF64_ST_BIND(sym->st_info), STT_OBJECT);
     } else {
         ax_objectAddSymbolFull(obj, name, offset, STT_OBJECT, 2); 
     }
@@ -135,7 +137,9 @@ void ax_objectAddSymbolFull(AxObject* obj, const char* name, uint64_t value, uin
     uint32_t name_idx = ax_objectAddString(obj, name);
     Elf64_Sym sym = {0};
     sym.st_name  = name_idx;
-    sym.st_info  = ELF64_ST_INFO(STB_GLOBAL, type); // e.g., STT_FUNC or STT_OBJECT
+    // sym.st_info  = ELF64_ST_INFO(STB_GLOBAL, type); // e.g., STT_FUNC or STT_OBJECT
+    // don't default to global anymore
+    sym.st_info  = ELF64_ST_INFO(ELF64_ST_BIND(type), ELF64_ST_TYPE(type)); // allow caller to specify bind/type separately
     sym.st_shndx = shndx; // Section index (e.g., 1 for .text, 2 for .data)
     sym.st_value = value;
     ax_vecPush(obj->symtab, sym);
@@ -150,7 +154,9 @@ void ax_objectDefineCodeLabel(AxObject* obj, const char* name) {
         Elf64_Sym* sym = &obj->symtab[existing_idx];
         sym->st_value = offset;
         sym->st_shndx = 1; // Move from UNDEF to .text
-        sym->st_info  = ELF64_ST_INFO(STB_GLOBAL, STT_FUNC);
+        // sym->st_info  = ELF64_ST_INFO(STB_GLOBAL, STT_FUNC);
+        // don't default to global anymore, now that we have .global directive to control that
+        sym->st_info  = ELF64_ST_INFO(ELF64_ST_BIND(sym->st_info), STT_FUNC);
     } else {
         // Brand new symbol
         ax_objectAddSymbolFull(obj, name, offset, STT_FUNC, 1);
