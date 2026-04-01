@@ -106,7 +106,7 @@ bin/stdlib_%_gcc_ld: bin/stdlib_%_gcc.o | bin
 	-$(CC) $(CFLAGS) $< -o $@
 
 bin/stdlib_%_axas_axld: bin/stdlib_%_axas.o | bin axlibc
-	-$(RUNNER) axld/bin/axld -o $@ axlibc/bin/libc.o $<
+	-$(RUNNER) axld/bin/axld -o $@ -l axlibc/bin/libc.a $<
 	-chmod +x $@
 
 STDLIB_SINGLES := $(patsubst tests/stdlib/%.S,%,$(wildcard tests/stdlib/*.S))

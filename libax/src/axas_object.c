@@ -18,6 +18,7 @@ void ax_objectInit(AxObject* obj) {
     obj->reltab = ax_vecNew(Elf64_Rela);
     obj->text_shndx = 1; // axas always puts .text at section 1
     obj->data_shndx = 2; // axas always puts .data at section 2
+    obj->is_linked = false;
 
     // ELF requires index 0 of strtab to be a null byte
     ax_vecPush(obj->strtab, '\0');
@@ -448,6 +449,7 @@ bool ax_objectLoad(AxObject* obj, const char* filename) {
     obj->strtab = ax_vecNew(char);
     obj->symtab = ax_vecNew(Elf64_Sym);
     obj->reltab = ax_vecNew(Elf64_Rela);
+    obj->is_linked = false;
     obj->ehdr   = temp_ehdr;
     // Defaults (axas-style); overridden below if we find different indices
     obj->text_shndx = 1;

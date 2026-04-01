@@ -9,117 +9,106 @@
 int main(int argc, char** argv) {
     if (argc == 1) {
         printf("Usage: %s <input_files> [-o <output_file>] [-l <static_library>]\n", argv[0]);
-        printf("Options:\n");
-        printf("  -o <file>   Specify output file (default is a.out extension)\n");
-        printf("  -l <file>   Specify static library to link against\n");
         return 1;
     }
 
-    const char** filenames = ax_vecNew(const char*);
-    char* output_filename = NULL;
-
-    const char** static_libs = ax_vecNew(const char*);
+    const char** input_filenames = ax_vecNew(const char*);
+    const char** lib_paths = ax_vecNew(const char*);
+    char* output_filename = "a.out";
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
             output_filename = argv[++i];
         } else if (strcmp(argv[i], "-l") == 0 && i + 1 < argc) {
-            ax_vecPush(static_libs, argv[++i]);
+            ax_vecPush(lib_paths, argv[++i]);
         } else {
-            ax_vecPush(filenames, argv[i]);
+            ax_vecPush(input_filenames, argv[i]);
         }
     }
-
-    if (ax_vecSize(filenames) == 0) {
-        printf("Error: No input files specified.\n");
-        return 1;
-    }
-
-    if (!output_filename) {
-        output_filename = "a.out";
-    }
-    
-    // AxObject obj;
-    // if (!ax_objectLoad(&obj, filename)) {
-    //     printf("Error: Failed to load object file %s.\n", filename);
-    //     return 1;
-    // }
 
     AxExecutable exec;
     ax_execInit(&exec);
-
-    // Load all objects up front so we can do two-pass linking:
-    // pass 1 registers every symbol before any relocations are patched,
-    // which lets forward cross-file references resolve correctly.
-    size_t n = ax_vecSize(filenames);
-    // AxObject* objs = malloc(sizeof(AxObject) * n);
     AxObject** objs = ax_vecNew(AxObject*);
 
-    for (size_t i = 0; i < n; i++) {
-        const char* filename = filenames[i];
-        // printf("Processing file: %s\n", filename);
-        ax_vecPush(objs, malloc(sizeof(AxObject)));
-        if (!ax_objectLoad(objs[ax_vecSize(objs) - 1], filename)) {
-            printf("Error: Failed to load object file %s.\n", filename);
-            free(objs);
+    // 1. Load primary object files
+    for (size_t i = 0; i < ax_vecSize(input_filenames); i++) {
+        AxObject* obj = malloc(sizeof(AxObject));
+        if (!ax_objectLoad(obj, input_filenames[i])) {
+            printf("Error: Failed to load %s\n", input_filenames[i]);
             return 1;
+        }
+        ax_vecPush(objs, obj);
+        ax_execRegisterSymbols(&exec, obj);
+    }
+
+    // 2. Pre-load archives to avoid repeated disk I/O
+    AxArchive* archives = malloc(sizeof(AxArchive) * ax_vecSize(lib_paths));
+    for (size_t i = 0; i < ax_vecSize(lib_paths); i++) {
+        if (!axar_read_archive(lib_paths[i], &archives[i])) {
+            printf("Warning: Could not read archive %s\n", lib_paths[i]);
+        }
+        printf("Loaded archive %s with %zu members and %zu symbols\n", lib_paths[i], archives[i].num_members, archives[i].num_symbols);
+        axar_list_symbols(&archives[i]); // Debug: list symbols in each archive
+    }
+
+    // 3. Recursive Library Resolution
+    // We keep looping as long as we successfully resolve at least one symbol,
+    // because that resolution might have introduced new undefined symbols.
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        char** undefs = exec.undefined_sym_names;
+
+        for (size_t i = 0; i < ax_vecSize(undefs); i++) {
+            const char* needed = undefs[i];
+            bool found_in_lib = false;
+
+            for (size_t j = 0; j < ax_vecSize(lib_paths); j++) {
+                size_t sym_idx = axar_find_symbol(&archives[j], needed);
+                
+                if (sym_idx != SIZE_MAX) {
+                    size_t mem_idx = archives[j].symtab[sym_idx].member_idx;
+                    AxObject* lib_obj = &archives[j].members[mem_idx];
+
+                    // Avoid double-loading the same member if multiple symbols point to it
+                    if (!lib_obj->is_linked) { 
+                        printf("Resolving %s -> %s(%zu)\n", needed, lib_paths[j], mem_idx);
+                        
+                        lib_obj->is_linked = true; // Mark to avoid duplicate inclusion
+                        ax_execRegisterSymbols(&exec, lib_obj);
+                        ax_vecPush(objs, lib_obj);
+                        
+                        changed = true;
+                        found_in_lib = true;
+                        break; 
+                    }
+                }
+            }
+            if (found_in_lib) break; // Restart undef scan because list changed
         }
     }
 
-    // Pass 1: register all symbols and compute layout offsets.
-    for (size_t i = 0; i < ax_vecSize(objs); i++)
-        ax_execRegisterSymbols(&exec, objs[i]);
-    
-    // Pass 1.5: find undefined symbols, and see if any of the static libraries can resolve them. (if not, print errors and exit)
-    char** undefined_syms = exec.undefined_sym_names;
-    for (size_t i = 0; i < ax_vecSize(undefined_syms); i++) {
-        const char* sym_name = undefined_syms[i];
-        bool resolved = false;
-        for (size_t j = 0; j < ax_vecSize(static_libs); j++) {
-            const char* lib_path = static_libs[j];
-            AxArchive ar;
-            if (!axar_read_archive(lib_path, &ar)) {
-                printf("Error: Failed to read static library %s.\n", lib_path);
-                continue;
-            }
-
-            size_t sym_idx = axar_find_symbol(&ar, sym_name);
-            if (sym_idx != SIZE_MAX) {
-                printf("Resolved symbol %s in library %s (member %zu)\n", sym_name, lib_path, ar.symtab[sym_idx].member_idx);
-                AxObject* lib_obj = &ar.members[ar.symtab[sym_idx].member_idx];
-                ax_execRegisterSymbols(&exec, lib_obj);
-                ax_vecPush(objs, lib_obj); // add this library member to the list of objects to link
-                resolved = true;
-                break;
-            }
-            axar_archive_free(&ar);
+    // 4. Final Unresolved Check
+    if (ax_vecSize(exec.undefined_sym_names) > 0) {
+        for (size_t i = 0; i < ax_vecSize(exec.undefined_sym_names); i++) {
+            printf("Error: Unresolved symbol %s\n", exec.undefined_sym_names[i]);
         }
-        if (!resolved) {
-            printf("Error: Unresolved symbol %s\n", sym_name);
-            for (size_t j = 0; j < ax_vecSize(objs); j++)
-                ax_objectFree(objs[j]);
-            ax_vecFree(objs);
-
-            
-            return 1;
-        }
+        return 1;
     }
 
-    // Pass 2: copy code/data and patch all relocations.
+    // 5. Relocation and Write
     for (size_t i = 0; i < ax_vecSize(objs); i++) {
         ax_execCopyAndPatch(&exec, objs[i]);
-        ax_objectFree(objs[i]);
     }
-    for (size_t i = 0; i < ax_vecSize(objs); i++)
-        free(objs[i]);
-    ax_vecFree(objs);
-    
-    if (ax_execWrite(&exec, output_filename)) {
-        // printf("Axiom: Linked executable %s successfully.\n", output_filename);
-    } else {
-        printf("Axiom: Failed to write executable %s.\n", output_filename);
-    }
-    ax_execFree(&exec);
 
+    ax_execWrite(&exec, output_filename);
+
+    // Cleanup
+    for (size_t i = 0; i < ax_vecSize(lib_paths); i++) axar_archive_free(&archives[i]);
+    free(archives);
+    // Note: lib_obj pointers in 'objs' are owned by the archives, 
+    // only free the ones we malloc'd for input files.
+    ax_execFree(&exec);
+    
     return 0;
 }

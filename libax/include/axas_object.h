@@ -24,6 +24,8 @@ typedef struct {
     uint64_t link_data_offset;
 
     Elf64_Ehdr ehdr;
+
+    bool is_linked;
 } AxObject;
 
 // Helper to add a string to the strtab and return its offset

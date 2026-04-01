@@ -46,4 +46,6 @@ void axar_archive_free(AxArchive* ar);
 // Look up which member index defines a symbol. Returns SIZE_MAX if not found.
 size_t axar_find_symbol(const AxArchive* ar, const char* name);
 
+void axar_list_symbols(const AxArchive* ar);
+
 #endif

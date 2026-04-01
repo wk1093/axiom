@@ -15,6 +15,7 @@ void ax_execInit(AxExecutable* exec) {
     exec->global_sym_names  = ax_vecNew(char*);
     exec->global_sym_vaddrs = ax_vecNew(uint64_t);
     exec->undefined_sym_names = ax_vecNew(char*);
+    ax_vecPush(exec->undefined_sym_names, strdup("_start"));
 }
 
 void ax_execFree(AxExecutable* exec) {
