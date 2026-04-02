@@ -34,7 +34,8 @@ int main(int argc, char** argv) {
     for (size_t i = 0; i < ax_vecSize(input_filenames); i++) {
         AxObject* obj = malloc(sizeof(AxObject));
         if (!ax_objectLoad(obj, input_filenames[i])) {
-            printf("Error: Failed to load %s\n", input_filenames[i]);
+            fprintf(stderr, "Error: Failed to load %s\n", input_filenames[i]);
+            free(obj);
             return 1;
         }
         ax_vecPush(objs, obj);
@@ -42,13 +43,13 @@ int main(int argc, char** argv) {
     }
 
     // 2. Pre-load archives to avoid repeated disk I/O
-    AxArchive* archives = malloc(sizeof(AxArchive) * ax_vecSize(lib_paths));
+    AxArchive* archives = calloc(ax_vecSize(lib_paths), sizeof(AxArchive));
     for (size_t i = 0; i < ax_vecSize(lib_paths); i++) {
         if (!axar_read_archive(lib_paths[i], &archives[i])) {
-            printf("Warning: Could not read archive %s\n", lib_paths[i]);
+            fprintf(stderr, "Warning: Could not read archive %s\n", lib_paths[i]);
         }
-        printf("Loaded archive %s with %zu members and %zu symbols\n", lib_paths[i], archives[i].num_members, archives[i].num_symbols);
-        axar_list_symbols(&archives[i]); // Debug: list symbols in each archive
+        // printf("Loaded archive %s with %zu members and %zu symbols\n", lib_paths[i], archives[i].num_members, archives[i].num_symbols);
+        // axar_list_symbols(&archives[i]); // Debug: list symbols in each archive
     }
 
     // 3. Recursive Library Resolution
@@ -72,7 +73,7 @@ int main(int argc, char** argv) {
 
                     // Avoid double-loading the same member if multiple symbols point to it
                     if (!lib_obj->is_linked) { 
-                        printf("Resolving %s -> %s(%zu)\n", needed, lib_paths[j], mem_idx);
+                        // printf("Resolving %s -> %s(%zu)\n", needed, lib_paths[j], mem_idx);
                         
                         lib_obj->is_linked = true; // Mark to avoid duplicate inclusion
                         ax_execRegisterSymbols(&exec, lib_obj);

@@ -55,7 +55,19 @@ static void patch_relocations(AxExecutable* exec, AxObject* obj,
         uint32_t sym_idx = ELF64_R_SYM(rel->r_info);
         uint32_t type    = ELF64_R_TYPE(rel->r_info);
 
+        if (sym_idx >= ax_vecSize(obj->symtab)) {
+            printf("Error: Relocation %u has symbol index %u out of bounds (symtab size %zu) — skipped\n",
+                   i, sym_idx, ax_vecSize(obj->symtab));
+            continue;
+        }
+
         Elf64_Sym* target_sym = &obj->symtab[sym_idx];
+
+        if (target_sym->st_name >= ax_vecSize(obj->strtab)) {
+            printf("Error: Symbol %u has st_name %u out of strtab bounds — skipped\n",
+                   sym_idx, target_sym->st_name);
+            continue;
+        }
 
         uint64_t S; // Final Symbol VAddr
         if (target_sym->st_shndx == SHN_UNDEF) {
@@ -73,6 +85,13 @@ static void patch_relocations(AxExecutable* exec, AxObject* obj,
 
         uint64_t P = text_segment_base + TOTAL_HEADER_SIZE + text_offset + rel->r_offset;
         int64_t  A = rel->r_addend;
+
+        if (exec->text_payload == NULL ||
+            text_offset + rel->r_offset + 4 > exec->text_payload_size) {
+            printf("Error: Relocation %u patch address 0x%lx is out of text segment bounds — skipped\n",
+                   i, text_offset + rel->r_offset);
+            continue;
+        }
 
         uint32_t* instr = (uint32_t*)(exec->text_payload + text_offset + rel->r_offset);
 
@@ -168,6 +187,11 @@ void ax_execRegisterSymbols(AxExecutable* exec, AxObject* obj) {
         Elf64_Sym* sym = &obj->symtab[i];
         if (sym->st_shndx == SHN_UNDEF) continue;
         if (sym->st_name == 0) continue;
+        if (sym->st_name >= ax_vecSize(obj->strtab)) {
+            printf("Warning: Symbol %u has st_name %u out of strtab bounds — skipped\n",
+                   i, sym->st_name);
+            continue;
+        }
         const char* name = obj->strtab + sym->st_name;
         if (name[0] == '\0') continue;
 

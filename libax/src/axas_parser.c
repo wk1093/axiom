@@ -43,7 +43,16 @@ AxParsedUnit ax_parseUnit(AxLexer* l) {
 
     unit.type = (t.type == TOK_DOT) ? UNIT_DIRECTIVE : UNIT_INSTR;
     if (unit.type == UNIT_DIRECTIVE) {
-        unit.directive.name = strdup(ax_lexerNextToken(l).str);
+        AxToken dir_name_tok = ax_lexerNextToken(l);
+        if (dir_name_tok.type != TOK_IDENT || dir_name_tok.str == NULL) {
+            printf("Error: Expected directive name after '.'");
+            if (dir_name_tok.type != TOK_NEWLINE && dir_name_tok.type != TOK_EOF) {
+                while (ax_lexerPeek(l) != '\n' && ax_lexerPeek(l) != '\0') ax_lexerNext(l);
+            }
+            unit.type = UNIT_EOF;
+            return unit;
+        }
+        unit.directive.name = strdup(dir_name_tok.str);
         char value_buf[512] = {0};
         ax_lexerSkipWhitespace(l);
         size_t i = 0;
@@ -75,6 +84,12 @@ AxParsedUnit ax_parseUnit(AxLexer* l) {
         unit.directive.value = strdup(value_buf);
         return unit;
     }
+    if ((t.type != TOK_IDENT && t.type != TOK_REG) || t.str == NULL) {
+        printf("Error: Unexpected token where instruction mnemonic expected\n");
+        while (ax_lexerPeek(l) != '\n' && ax_lexerPeek(l) != '\0') ax_lexerNext(l);
+        unit.type = UNIT_EOF;
+        return unit;
+    }
     strncpy(unit.instr.mnem, t.str, 15);
     unit.instr.mnem[15] = '\0';
 
@@ -83,6 +98,11 @@ AxParsedUnit ax_parseUnit(AxLexer* l) {
         if (arg.type == TOK_NEWLINE || arg.type == TOK_EOF) break;
         if (arg.type == TOK_COMMA) continue;
 
+        if (unit.instr.arg_count >= 3) {
+            printf("Error: Too many operands for instruction '%s' (max 3)\n", unit.instr.mnem);
+            while (arg.type != TOK_NEWLINE && arg.type != TOK_EOF) arg = ax_lexerNextToken(l);
+            break;
+        }
         AxIrArg* current = &unit.instr.args[unit.instr.arg_count++];
         if (arg.type == TOK_REG) {
             int idx = regToIdx(arg.str);
@@ -97,6 +117,7 @@ AxParsedUnit ax_parseUnit(AxLexer* l) {
             if (base_reg.type != TOK_REG) {
                 // Handle error: expected register after '['
                 printf("Error: Expected register after '[' in memory operand\n");
+                unit.instr.arg_count--; // undo the pre-increment so the slot isn't left dirty
                 continue;
             }
             current->type = ARG_REG_IMM;

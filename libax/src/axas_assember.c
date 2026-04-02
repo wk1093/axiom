@@ -20,6 +20,10 @@ void ax_resolveSpecialArgs(AxIrInstr* ir) {
 AxOpcode ax_resolveOpcode(AxParsedUnit* unit) {
     // This is fucked
     if (strcmp(unit->instr.mnem, "stp") == 0) {
+        if (unit->instr.arg_count < 2) {
+            printf("Error: 'stp' requires at least 2 operands\n");
+            return OP_COUNT;
+        }
         if (unit->instr.args[0].is_64 && unit->instr.args[1].is_64) {
             if (unit->instr.is_pre_index) {
                 return OP_STP64_PRE;
@@ -42,6 +46,10 @@ AxOpcode ax_resolveOpcode(AxParsedUnit* unit) {
             return OP_COUNT; // Invalid opcode
         }
     } else if (strcmp(unit->instr.mnem, "ldp") == 0) {
+        if (unit->instr.arg_count < 2) {
+            printf("Error: 'ldp' requires at least 2 operands\n");
+            return OP_COUNT;
+        }
         if (unit->instr.args[0].is_64 && unit->instr.args[1].is_64) {
             if (unit->instr.is_pre_index) {
                 return OP_LDP64_PRE;
@@ -64,6 +72,10 @@ AxOpcode ax_resolveOpcode(AxParsedUnit* unit) {
             return OP_COUNT; // Invalid opcode
         }
     } else if (strcmp(unit->instr.mnem, "mov") == 0) {
+        if (unit->instr.arg_count < 2) {
+            printf("Error: 'mov' requires 2 operands\n");
+            return OP_COUNT;
+        }
         if (unit->instr.args[1].type == ARG_IMM) {
             if (unit->instr.args[0].is_64) {
                 return OP_MOVZ_64;
@@ -105,38 +117,46 @@ AxOpcode ax_resolveOpcode(AxParsedUnit* unit) {
             return OP_COUNT; // Invalid opcode
         }
     } else if (strcmp(unit->instr.mnem, "ldr") == 0) {
+        if (unit->instr.arg_count < 1) { printf("Error: 'ldr' requires operands\n"); return OP_COUNT; }
         return unit->instr.args[0].is_64 ? OP_LDR_64 : OP_LDR;
     } else if (strcmp(unit->instr.mnem, "str") == 0) {
+        if (unit->instr.arg_count < 1) { printf("Error: 'str' requires operands\n"); return OP_COUNT; }
         return unit->instr.args[0].is_64 ? OP_STR_64 : OP_STR;
     } else if (strcmp(unit->instr.mnem, "ldrb") == 0) {
         return OP_LDRB;
     } else if (strcmp(unit->instr.mnem, "cbz") == 0) {
+        if (unit->instr.arg_count < 1) { printf("Error: 'cbz' requires operands\n"); return OP_COUNT; }
         return unit->instr.args[0].is_64 ? OP_CBZ_64 : OP_CBZ;
     } else if (strcmp(unit->instr.mnem, "sub") == 0) {
+        if (unit->instr.arg_count < 3) { printf("Error: 'sub' requires 3 operands\n"); return OP_COUNT; }
         if (unit->instr.args[2].type == ARG_IMM) {
             return unit->instr.args[0].is_64 ? OP_SUB_IMM_64 : OP_SUB_IMM_32;
         } else {
             return unit->instr.args[0].is_64 ? OP_SUB_64 : OP_SUB_32;
         }
     } else if (strcmp(unit->instr.mnem, "subs") == 0) {
+        if (unit->instr.arg_count < 3) { printf("Error: 'subs' requires 3 operands\n"); return OP_COUNT; }
         if (unit->instr.args[2].type == ARG_IMM) {
             return unit->instr.args[0].is_64 ? OP_SUBS_IMM_64 : OP_SUBS_IMM_32;
         } else {
             return unit->instr.args[0].is_64 ? OP_SUBS_64 : OP_SUBS_32;
         }
     } else if (strcmp(unit->instr.mnem, "add") == 0) {
+        if (unit->instr.arg_count < 3) { printf("Error: 'add' requires 3 operands\n"); return OP_COUNT; }
         if (unit->instr.args[2].type == ARG_IMM) {
             return unit->instr.args[0].is_64 ? OP_ADD_IMM_64 : OP_ADD_IMM_32;
         } else {
             return unit->instr.args[0].is_64 ? OP_ADD_64 : OP_ADD_32;
         }
     } else if (strcmp(unit->instr.mnem, "adds") == 0) {
+        if (unit->instr.arg_count < 3) { printf("Error: 'adds' requires 3 operands\n"); return OP_COUNT; }
         if (unit->instr.args[2].type == ARG_IMM) {
             return unit->instr.args[0].is_64 ? OP_ADDS_IMM_64 : OP_ADDS_IMM_32;
         } else {
             return unit->instr.args[0].is_64 ? OP_ADDS_64 : OP_ADDS_32;
         }
     } else if (strcmp(unit->instr.mnem, "cmp") == 0) {
+        if (unit->instr.arg_count < 2) { printf("Error: 'cmp' requires 2 operands\n"); return OP_COUNT; }
         if (unit->instr.args[1].type == ARG_IMM) {
             return unit->instr.args[0].is_64 ? OP_SUBS_IMM_64 : OP_SUBS_IMM_32; // CMP is actually a SUBS that updates flags
         } else {
@@ -263,7 +283,7 @@ void ax_assemble(AxObject* obj, AxLexer* lexer) {
             case UNIT_INSTR:
                 AxIrInstr ir = {0};
                 ir.opcode = ax_resolveOpcode(&unit);
-                
+                if (ir.opcode == OP_COUNT) break; // skip invalid instructions
                 ir.arg_count = unit.instr.arg_count;
                 memcpy(ir.args, unit.instr.args, sizeof(AxIrArg) * ir.arg_count);
                 ax_resolveSpecialArgs(&ir);
