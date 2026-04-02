@@ -336,7 +336,7 @@ void axar_archive_free(AxArchive* ar) {
 size_t axar_find_symbol(const AxArchive* ar, const char* name) {
     for (size_t i = 0; i < ar->num_symbols; i++)
         if (strcmp(ar->symtab[i].name, name) == 0)
-            return ar->symtab[i].member_idx;
+            return i;
     return SIZE_MAX;
 }
 

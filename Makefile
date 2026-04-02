@@ -131,3 +131,11 @@ test: $(ALL_TEST_EXES)
 			echo "SKIP: $$exe (not built)"; \
 		fi; \
 	done
+
+gdb:
+	# Example usage: make gdb EXE="bin/standalone_hello_axas_axld"
+	$(GDB) $(EXE)
+
+dbg:
+	# Example usage: make dbg EXE="bin/standalone_hello_axas_axld"
+	$(DBG) $(EXE)
