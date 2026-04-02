@@ -67,4 +67,4 @@ X(CBZ_64, "cbz", 2, 0xB4000000, F_64 | F_IMM, encode_cbz)
 
 X(ADRP, "adrp", 2, 0x90000000, F_64 | F_IMM, encode_adrp)
 
-X(BNE, "b.ne", 1, 0x54000000, F_UNI | F_IMM, encode_branch_cond)
+X(BNE, "b.ne", 1, 0x54000001, F_UNI | F_IMM, encode_branch_cond)

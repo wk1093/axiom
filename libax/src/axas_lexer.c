@@ -186,6 +186,11 @@ AxToken ax_lexerPeekToken(AxLexer* l) {
     size_t savedPos = l->pos;
     AxToken token = ax_lexerNextToken(l);
     l->pos = savedPos;
+    // Free any string the speculative lex allocated so we don't leak it.
+    if (token.str && (token.type == TOK_IDENT || token.type == TOK_REG || token.type == TOK_STRING)) {
+        free(token.str);
+        token.str = NULL;
+    }
     return token;
 }
 

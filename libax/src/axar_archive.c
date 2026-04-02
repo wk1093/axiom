@@ -129,6 +129,10 @@ void axar_write_archive(FILE *ar_file, char *obj_files[], int num_obj_files) {
         fwrite(&header, sizeof(header), 1, ar_file);
 
         FILE* obj_fp = fopen(obj_files[i], "rb");
+        if (!obj_fp) {
+            fprintf(stderr, "axar_write_archive: failed to open '%s'\n", obj_files[i]);
+            continue;
+        }
         char buffer[4096];
         size_t n;
         while ((n = fread(buffer, 1, sizeof(buffer), obj_fp)) > 0) {

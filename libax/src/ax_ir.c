@@ -115,7 +115,8 @@ uint32_t encode_branch_imm(uint32_t base_opcode, AxIrInstr* instr) {
 uint32_t encode_branch_cond(uint32_t base_opcode, AxIrInstr* instr) {
     uint32_t opcode = base_opcode;
     AxIrArg* imm = &instr->args[0];
-    opcode |= ((imm->val >> 2) & 0xFFFFFF);
+    // B.cond: imm19 at bits [23:5], condition code at bits [3:0]
+    opcode |= (((imm->val >> 2) & 0x7FFFF) << 5);
     return opcode;
 }
 
@@ -128,12 +129,14 @@ uint32_t encode_ret(uint32_t base_opcode, AxIrInstr* instr) {
 
 uint32_t encode_ldst_imm(uint32_t base_opcode, AxIrInstr* instr) {
     uint32_t opcode = base_opcode;
-    AxIrArg* rt = &instr->args[0];
-    AxIrArg* rn = &instr->args[1];
-    AxIrArg* imm = &instr->args[2];
+    AxIrArg* rt   = &instr->args[0]; // destination/source register
+    AxIrArg* addr = &instr->args[1]; // ARG_REG_IMM: base register + byte offset
     opcode |= (rt->reg_idx & 0x1F);
-    opcode |= ((rn->reg_idx & 0x1F) << 5);
-    opcode |= ((imm->val & 0xFFF) << 10);
+    opcode |= ((addr->reg_idx & 0x1F) << 5);
+    // pimm12 stores the offset divided by the access size.
+    // bits [31:30] of the base opcode encode the size: 0=1B, 1=2B, 2=4B, 3=8B.
+    int scale_shift = (base_opcode >> 30) & 3;
+    opcode |= (((addr->val >> scale_shift) & 0xFFF) << 10);
     return opcode;
 }
 

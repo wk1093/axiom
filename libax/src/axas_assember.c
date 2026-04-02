@@ -18,7 +18,6 @@ void ax_resolveSpecialArgs(AxIrInstr* ir) {
 }
 
 AxOpcode ax_resolveOpcode(AxParsedUnit* unit) {
-    // This is fucked
     if (strcmp(unit->instr.mnem, "stp") == 0) {
         if (unit->instr.arg_count < 2) {
             printf("Error: 'stp' requires at least 2 operands\n");
@@ -157,24 +156,29 @@ AxOpcode ax_resolveOpcode(AxParsedUnit* unit) {
         }
     } else if (strcmp(unit->instr.mnem, "cmp") == 0) {
         if (unit->instr.arg_count < 2) { printf("Error: 'cmp' requires 2 operands\n"); return OP_COUNT; }
-        if (unit->instr.args[1].type == ARG_IMM) {
-            return unit->instr.args[0].is_64 ? OP_SUBS_IMM_64 : OP_SUBS_IMM_32; // CMP is actually a SUBS that updates flags
+        // CMP Rn, <Rm|#imm> is an alias for SUBS XZR, Rn, <Rm|#imm>.
+        // Insert XZR as the destination so the result is discarded and only flags are set.
+        unit->instr.args[2] = unit->instr.args[1]; // Rm or #imm -> slot 2
+        unit->instr.args[1] = unit->instr.args[0]; // Rn -> slot 1
+        bool is_64 = unit->instr.args[1].is_64;
+        unit->instr.args[0] = (AxIrArg){ .type = ARG_REG, .reg_idx = 31, .is_64 = is_64 };
+        unit->instr.arg_count = 3;
+        if (unit->instr.args[2].type == ARG_IMM) {
+            return is_64 ? OP_SUBS_IMM_64 : OP_SUBS_IMM_32;
         } else {
-            return unit->instr.args[0].is_64 ? OP_SUBS_64 : OP_SUBS_32; // CMP is actually a SUBS that updates flags
+            return is_64 ? OP_SUBS_64 : OP_SUBS_32;
         }
     } else if (strcmp(unit->instr.mnem, "bne") == 0) {
         return OP_BNE;
-    }
-    else {
-        // For other instructions, we can do a simple linear search
+    } else {
+        // For other instructions, try a linear search through the opcode table.
         for (int i = 0; i < OP_COUNT; i++) {
             if (strcmp(unit->instr.mnem, ax_opcodeToMnem((AxOpcode)i)) == 0) {
                 return (AxOpcode)i;
             }
         }
-        // Handle error: unknown instruction mnemonic
         printf("Error: Unknown instruction mnemonic '%s'\n", unit->instr.mnem);
-        return OP_COUNT; // Invalid opcode
+        return OP_COUNT;
     }
 }
 

@@ -67,8 +67,17 @@ int main(int argc, char** argv) {
         }
 
         fseek(f, 0, SEEK_END);
-        size_t filesize = ftell(f);
+        long filelen = ftell(f);
         fseek(f, 0, SEEK_SET);
+        if (filelen < 0) {
+            fprintf(stderr, "Error: Could not determine size of '%s'\n", input_files[i]);
+            fclose(f);
+            ax_objectFree(&obj);
+            free(input_files);
+            if (output_alloc) free(output_filename);
+            return 1;
+        }
+        size_t filesize = (size_t)filelen;
         char* contents = malloc(filesize + 1);
         fread(contents, 1, filesize, f);
         contents[filesize] = '\0';

@@ -39,6 +39,9 @@ typedef struct {
 
 AxLexer *ax_lexerNew(const char *src);
 void ax_lexerFree(AxLexer *lexer);
+char ax_lexerPeek(AxLexer *lexer);
+char ax_lexerNext(AxLexer *lexer);
+void ax_lexerSkipWhitespace(AxLexer *lexer);
 AxToken ax_lexerNextToken(AxLexer* l);
 void ax_printToken(AxToken token);
 AxToken ax_lexerPeekToken(AxLexer* l);

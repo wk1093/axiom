@@ -21,10 +21,6 @@ bool regIs64(const char* reg) {
     return false;
 }
 
-char ax_lexerPeek(AxLexer *lexer);
-char ax_lexerNext(AxLexer *lexer);
-void ax_lexerSkipWhitespace(AxLexer *lexer);
-
 AxParsedUnit ax_parseUnit(AxLexer* l) {
     AxParsedUnit unit = {0};
     AxToken t = ax_lexerNextToken(l);
@@ -45,7 +41,7 @@ AxParsedUnit ax_parseUnit(AxLexer* l) {
     if (unit.type == UNIT_DIRECTIVE) {
         AxToken dir_name_tok = ax_lexerNextToken(l);
         if (dir_name_tok.type != TOK_IDENT || dir_name_tok.str == NULL) {
-            printf("Error: Expected directive name after '.'");
+            printf("Error: Expected directive name after '.'\n");;
             if (dir_name_tok.type != TOK_NEWLINE && dir_name_tok.type != TOK_EOF) {
                 while (ax_lexerPeek(l) != '\n' && ax_lexerPeek(l) != '\0') ax_lexerNext(l);
             }

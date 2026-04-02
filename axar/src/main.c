@@ -21,7 +21,7 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
-    ar_file = fopen(argv[1], "w");
+    ar_file = fopen(argv[1], "wb");
     if (!ar_file) {
         perror("fopen");
         return 1;
